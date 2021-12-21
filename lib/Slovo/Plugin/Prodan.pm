@@ -161,33 +161,35 @@ __DATA__
 
 @@ css/cart.css
 @charset "utf-8";
-aside#widgets {
-    padding-top: 7rem;
-    padding-bottom: 4rem;
-    position: fixed;
-    top: 0;
-    right: 0;
-    font-family: FreeSans, sans-serif;
-    max-width: 50%;
-}
 
 #show_order {
     background-color: var(--bg-color);
 }
+
 #order_widget {
     padding: 0;
     z-index: 2;
     background-color: var(--bg-color);
+    color: black;
+    /* 'position' cannot be fixed, because it must be slidable in case there
+     * are more * products and the bottom of the table is not visible on the
+     * screen. */
+    position: absolute;
+    top: 8rem;
+    left: 0;
 }
 
-#order_widget>h2 {
+#order_widget>h3 {
     margin: 0;
 }
 
 #order_widget>button:nth-child(1) {
     float: right;
-} 
+}
 
+#order_widget>table {
+    position: relative;
+}
 #order_widget>table>tfoot th:nth-last-child(1),
 #order_widget>table>tbody td:nth-last-child(1) {
     max-width: 13rem;
@@ -198,7 +200,7 @@ aside#widgets {
 #order_widget>table>thead th:nth-last-child(2),
 #order_widget>table>tfoot th:nth-last-child(3),
 #order_widget>table>tbody td:nth-last-child(2) {
-    width: 5rem;
+    max-width: 5rem;
     white-space: nowrap;
     text-align: right;
 }
@@ -206,14 +208,14 @@ aside#widgets {
 #order_widget>table>thead th:nth-last-child(3),
 #order_widget>table>tfoot th:nth-last-child(3),
 #order_widget>table>tbody td:nth-last-child(3) {
-    width: 7rem;
+    max-width: 7rem;
     white-space: nowrap;
     text-align: right;
 }
 
 #order_widget>table>tfoot th:nth-last-child(4),
 #order_widget>table>tbody td:nth-last-child(4) {
-    max-width: 20rem;
+    max-width: 40rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -222,14 +224,14 @@ aside#widgets {
 #order_widget>table>tfoot th:nth-last-child(4){
     text-align: right;
 }
-button.product,.button.product,
-#order_widget .button.cart, #order_widget button.cart {
+
+button.product,.button.product, .button.cart, button.cart {
 	font-family: FreeSans, sans-serif;
 	color: var(--color-success);
 	font-weight: bolder;
 	border-radius: 4px;
 	font-size: small;
-	padding: .5rem 1rem;
+	padding: .2rem .2em;
 }
 
 #order_widget tr:nth-child(even) td {
@@ -254,15 +256,11 @@ img.outline {
     bottom: 0;
     right: 0;
     z-index: 3;
-    background-color: rgba(250, 250, 250, 0.95);
+    background-color: rgba(250, 250, 250, 0.80);
 
 }
 @media (max-width: 700px) {
-    aside#widgets {
-        padding-top: 10.5rem;
-        padding-bottom: 4rem;
-        max-width: 100%;
-    }
+    /* .plus, .minus,.remove images as buttons */
     #order_widget img.outline {
         width: 32px;
     }
@@ -272,8 +270,7 @@ img.outline {
     }
     #order_widget>table>tfoot th:nth-last-child(4),
     #order_widget>table>tbody td:nth-last-child(4) {
-        max-width: 12rem;
-        white-space: wrap;
+       max-width: 10rem; 
     }
     .remove {
         display: none;
@@ -287,32 +284,70 @@ img.outline {
 jQuery(function ($) {
     'use strict';
     let cart = localStorage.cart ? JSON.parse(localStorage.cart) : {};
-    let order_widget_template =
+    const order_widget_template =
         `
 <div id="order_widget" class="card text-center">
 <button class="button primary outline icon cart" title="Показване/Скриване на поръчката"
-    id="show_order"><span class="order_total"></span><img src="/img/cart.svg" width="24" /></button>
-<h2 style="display:none">Поръчка</h2>
+    id="show_order"><span class="order_total"></span><img src="/img/cart.svg" width="32" /></button>
+<h3 style="display:none">Поръчка</h3>
 <table style="display:none">
 <thead><tr><th>Изделие</th><th>Ед. цена</th><th>Бр.</th><th><!-- action --></th></tr></thead>
 <tbody><!-- Here will be the order items --></tbody>
 <tfoot>
 <tr><th>
-<button class="button primary outline icon cart pull-left"
-title="Отказ от поръчката" id="cancel_order"><img src="/img/cart-off.svg" width="24" /></button>
 Общо (лв.)</th><th class="order_total"></th>
-<th></th>
+<th>
+    <button class="button primary outline icon cart pull-left"
+        title="Отказ от поръчката" id="cancel_order"><img 
+            src="/img/cart-off.svg" width="32" /></button>
+</th>
 <th>
 <button class="button primary icon cart"
-title="Поръчка по е-поща" id="email_order"><img src="/css/malka/email-fast-outline.svg" width="24"></button>
-<button class="button primary outline icon cart"
-title="Поръчка по Еконт" id="econt_order"><img src="/img/econt.svg" width="24"></button>
+title="Купувам" id="email_order"><img src="/img/cart-check.svg" width="32" /></button>
 </th>
 </tr>
 </tfoot>
 </table>
 </div>
 `;
+const email_order_template =`
+<div id="email_order_layer" style="display:none">
+<form id="email_order_form" method="POST" action="/prodan/poruchka" class="container">
+<fieldset class="card">
+<legend>Поръчка</legend>
+<button class="button outline icon cart pull-right" title="Скриване на формуляра"
+    id="hide_email_order"><span class="order_total"></span><img src="/img/arrow-collapse-all.svg" width="32" /></button>
+<button class="button outline icon cart pull-right" title="Пояснения"
+    id="help_email_order"><img src="/css/malka/help-circle-outline.svg" width="32" /></button>
+
+<label for="name" title="Собствено и родово име или име на фирма, получател.">Получател</label>
+<input type="text" name="name" placeholder="Иванка Петканова"/>
+<label for="name" title="Адрес, на който ще получите уведомление, когато предадем пратката на доставчика. При закупуване на електронни изделия, на този адрес ще получите връзка за изтегляне на файла.">E-поща</label>
+<input type="email" name="email" placeholder="ivanka@primer.com"/>
+<label for="name" title="Телефонен номер, на който ще получите съобщение от доставчика, когато пратката ви пристигне.">Телефон</label>
+<input type="phone" name="phone" placeholder="0891234567"/>
+<label for="deliverer" title="Изберете кой от доставчиците, с които работим, предпочитате. При закупуване на електронни изделия, ще изпратим връзка за изтегляне и банкова сметка, на която да преведете сумата на поръчката.">Предпочитан доставчик</label>
+<select name="deliverer">
+    <option value="econt">Е-поща (за електронни издания и софтуер)</option>
+    <option value="econt">Еконт</option>
+    <option value="speedy">Спиди</option>
+</select>
+<label for="name" title="Вашият точен адрес за получаване на пратката или адрес на офис на избрания доставчик. При закупуване на електронни изделия и услуги това поле не е задължително.">Адрес за получаване</label>
+<input type="phone" name="address" placeholder="п.к. 3210 с. Горно Нанадолнище, ул. „Цветуша“ №123" />
+<label for="notes" title="Ако желаете да добавите някакви подробности и уточнения, веведете ги в това поле.">Допълнителни бележки</label>
+<textarea name="notes" rows="2"></textarea>
+<input type="hidden" name="order_items" value="{}"/>
+<footer class="is-right" style="margin-top:1rem">
+    <button type="reset" class="secondary outline button icon-only"
+        class="reset_order_form" title="изчистване"><img src="/css/malka/card-bulleted-off-outline.svg" width="32" /></button>
+    &nbsp;&nbsp;<button class="primary button icon-only" type="submit"
+        title="Поръчвам"><img src="/img/cart-check.svg" width="32" /></button>
+</footer>
+</fieldset>
+</form>
+</div>
+`;
+
     show_order();
     /* In a regular page we present a product(book, software package,
      * whatever). On the page there is one or more buttons(one per product)
@@ -336,6 +371,8 @@ title="Поръчка по Еконт" id="econt_order"><img src="/img/econt.svg
         }
         // display the cart in #order_widget
         show_order();
+        //Scroll to the top to show the cart because it is positioned absolutely.
+        $('html').animate({scrollTop: 0}, 300)
     }
 
     function cancel_order() {
@@ -352,13 +389,17 @@ title="Поръчка по Еконт" id="econt_order"><img src="/img/econt.svg
         // Store the changed cart!!!
         localStorage.setItem('cart', JSON.stringify(cart));
         let order_widget = $('#order_widget');
-        //if not yet in dom, create it in #widgets
+        //if not yet in dom, create it
         if (!order_widget.length) {
-            $('#widgets').prepend(order_widget_template);
+            $('body').append(order_widget_template);
             //populate the table>tbody with the contents of the cart
             $(Object.keys(cart)).each(populate_order_table);
             // make the cart button to toggle the visibility of the products table
             $('#show_order').click(toggle_order_table_visibility);
+            // append the email_order_form
+            if(!$('#email_order_layer').length)
+                $('body').append(email_order_template);
+
         }
         //else update it
         else {
@@ -370,6 +411,7 @@ title="Поръчка по Еконт" id="econt_order"><img src="/img/econt.svg
         // VAT is included in the price
         $('.order_total').html(sum.toFixed(2));
         $('#cancel_order').click(cancel_order);
+
         $('#email_order').click(show_email_order);
     } // end function show_order()
 
@@ -428,42 +470,40 @@ title="Поръчка по Еконт" id="econt_order"><img src="/img/econt.svg
             order_button_icon.attr('src', '/img/arrow-collapse-all.svg');
         else
             order_button_icon.attr('src', '/img/cart.svg');
-        $('#order_widget>h2,#order_widget>table').toggle();
+        $('#order_widget>h3,#order_widget>table').toggle();
     }
 
-    const email_order_template =`
-<div id="email_order_layer">
-<form id="order_form" class="container">
-<fieldset class="card">
-<legend>Поръчка</legend>
-<label for="name">Получател<br />(име и фамилия)</label>
-<input type="text" name="name" placeholder="Иванка Петканова"/>
-<label for="name">E-поща</label>
-<input type="email" name="email" placeholder="ivanka@primer.com"/>
-<label for="name">Телефон</label>
-<input type="phone" name="phone" placeholder="0891234567"/>
-<label for="name">Адрес за получаване</label>
-<input type="phone" name="address" placeholder="п.к. 3210 с. Горно Нанадолнище, ул. „Цветуша“ №123" />
-<label for="note">Допълнителни бележки</label>
-<textarea name="note"></textarea>
-<footer class="is-right" style="margin-top:1rem">
-    <button class="primary"
-        class="cancel_order" title="Отказ"><img src="/img/cart-off.svg" width="32"></button>
-    &nbsp;&nbsp;<button class="primary button"
-        title="Поръчвам"><img src="/img/cart-check.svg" width="32"></button>
-</footer>
-</fieldset>
-</form>
-</div>
-    `;
-    function show_email_order(){
-        if(!$('#email_order_template').length)
-            $('body').append(email_order_template);
+    function show_email_order() {
+        $('#email_order_layer').show();
+        let hide = $('#hide_email_order');
+        hide.off('click');
+        hide.click(function(e){
+            $('#email_order_layer').hide();
+            e.preventDefault();
+        });
 
-    }
+        let help = $('#help_email_order');
+        help.off('click');
+        //Display help text for each field in the form.
+        help.click(function(e){
+            e.preventDefault();
+            let titles = `
+<button class="button outline icon cart pull-right" title="Скриване на поясненията"
+    id="hide_order_help"><img src="/img/arrow-collapse-all.svg" width="32" /></button>
+                <h4>${$('#email_order_form legend').text()}</h4>`;
+            // take the help from label titles
+            $('#email_order_form label').each(function(){
+                let self = $(this);
+                titles += `<p><b>${self.html()}</b>:<br/>${self.prop('title')}</p>`;
+            });
+            // display the help
+            $('main.container').append(`<div id="order_help" class="card"
+                style="z-index: 4;position:absolute;top:0;left:0;">${titles}</div>`);
+            // remove the help from the DOM
+            $('#hide_order_help').click(()=>$('#order_help').remove());
+        });
+    } // end function show_email_order()
 });
-
-
 
 @@ partials/_widgets.html.ep
     <aside id="widgets"></aside>
