@@ -5,9 +5,10 @@ use Mojo::JSON qw(true false);
 
 our $AUTHORITY = 'cpan:BEROV';
 our $VERSION   = '0.01';
+has app => sub { Mojo::HelloWorld->new }, weak => 1;
 
 sub register ($self, $app, $conf) {
-
+    $self->app($app);
     # Prepend class
     unshift @{$app->renderer->classes}, __PACKAGE__;
 
@@ -20,7 +21,7 @@ sub register ($self, $app, $conf) {
     # $app->debug('Prodan $config', $conf);
     # Set this flag, when we have changes to the tables to be applied.
     $self->_migrate($app, $conf) if ($conf->{migrate});
-    require Storable;
+
     my $spec = $app->openapi_spec;
     %{$spec->{definitions}} = (%{$spec->{definitions}}, $self->_definitions);
     %{$spec->{paths}}       = (%{$spec->{paths}},       $self->_paths);
@@ -41,6 +42,8 @@ sub register ($self, $app, $conf) {
             }
         );
     }
+    # configure deliverers
+    $self->_configure_deliverers($conf);
     return $self;
 }
 
@@ -88,7 +91,18 @@ sub _paths {
                     default => {'$ref' => '#/definitions/ErrorResponse'}
                 }
             }
-        }
+        },
+        '/shop' =>{
+            get => {
+                description =>'Provides data for the shop',
+                'x-mojo-to' => 'poruchki#shop',
+                responses =>{
+
+                    default => {'$ref' => '#/definitions/ErrorResponse'}
+                }
+
+            }
+        },
     );
 }
 
@@ -175,7 +189,46 @@ sub _migrate ($self, $app, $conf) {
   return $self;
 }
 
+# Deliverers are companies which deliver goods to users of our online shop.
+# Such delivereres in Bulgaria are Econt, Speedy, Bulgarian Posts and others.
+# Currently we integrate only Econt
+my sub DELIVERERS {
+    return qw(econt)
+};
+sub _configure_deliverers($self,$conf) {
+    for my $d (DELIVERERS){
+        my $d_sub = '_configure_'.$d;
+        $self->$d_sub($conf);
+    }
+}
+
+# The keys in the $conf hash reference are named after the examples given at
+# http://delivery.econt.com/services/
+sub _configure_econt ($self, $conf) {
+    my $eco = $conf->{econt};
+
+    # ID на магазина в "Достави с Еконт"
+    $eco->{shop_id} //= 1234567;
+
+    # Код за свързване
+    $eco->{private_key} //= '7290207@KdsjfkewhewKew';
+
+    # валута на магазина (валута на наложения платеж)
+    $eco->{shop_currency} //= 'BGN';
+
+    # URL визуализиращ форма за доставка
+    $eco->{shippment_calc_url} //= 'https://delivery-demo.econt.com/customer_info.php';
+
+    # Ендпойнта на услугата за създаване или редактиране на поръчка
+    $eco->{update_order_endpoint} //=
+      'https://delivery-demo.econt.com/services/OrdersService.updateOrder.json';
+
+    $self->app->debug($conf);
+    $self->app->config->{shop} = $eco;
+}
+
 1;
+
 
 #POD
 
@@ -312,153 +365,184 @@ may contain other free software which belongs to their respective authors.
 
 =cut
 
+
 __DATA__
 
 @@ css/cart.css
+/* cd ~/opt/dev/Slovo && beautify-css -p  domove/xn--b1arjbl.xn--90ae/public/css/cart.css */
 @charset "utf-8";
 
 #show_order {
-    background-color: var(--bg-color);
+  background-color: var(--bg-color);
 }
 
 #order_widget {
-    padding: 0;
-    z-index: 2;
-    background-color: var(--bg-color);
-    color: black;
-    /* 'position' cannot be fixed, because it must be slidable in case there
-     * are more * products and the bottom of the table is not visible on the
+  padding: 0;
+  z-index: 2;
+  background-color: var(--bg-color);
+  color: black;
+  /* 'position' cannot be fixed, because it must be slidable in case there
+     * are more products and the bottom of the table is not visible on the
      * screen. */
-    position: absolute;
-    top: 8rem;
-    left: 0;
+  position: absolute;
+  top: 8rem;
+  left: 0;
 }
 
 #order_widget>h3 {
-    margin: 0;
+  margin: 0;
 }
 
 #order_widget>button:nth-child(1) {
-    float: right;
+  float: right;
 }
 
 #order_widget>table {
-    position: relative;
+  position: relative;
 }
+
 #order_widget>table>tfoot th:nth-last-child(1),
 #order_widget>table>tbody td:nth-last-child(1) {
-    max-width: 13rem;
-   /* white-space: nowrap; */
-    text-align: center;
+  max-width: 13rem;
+  /* white-space: nowrap; */
+  text-align: center;
 }
 
 #order_widget>table>thead th:nth-last-child(2),
 #order_widget>table>tfoot th:nth-last-child(3),
 #order_widget>table>tbody td:nth-last-child(2) {
-    max-width: 5rem;
-    white-space: nowrap;
-    text-align: right;
+  max-width: 5rem;
+  white-space: nowrap;
+  text-align: right;
 }
 
 #order_widget>table>thead th:nth-last-child(3),
 #order_widget>table>tfoot th:nth-last-child(3),
 #order_widget>table>tbody td:nth-last-child(3) {
-    max-width: 7rem;
-    white-space: nowrap;
-    text-align: right;
+  max-width: 7rem;
+  white-space: nowrap;
+  text-align: right;
 }
 
 #order_widget>table>tfoot th:nth-last-child(4),
 #order_widget>table>tbody td:nth-last-child(4) {
-    max-width: 40rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  max-width: 40rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-#order_widget>table>tfoot th:nth-last-child(4){
-    text-align: right;
+#order_widget>table>tfoot th:nth-last-child(4) {
+  text-align: right;
 }
 
-button.product,.button.product, .button.cart, button.cart {
-	font-family: FreeSans, sans-serif;
-	color: var(--color-success);
-	font-weight: bolder;
-	border-radius: 4px;
-	font-size: small;
-	padding: .2rem .2em;
+button.product,
+.button.product,
+.button.cart,
+button.cart {
+  font-family: FreeSans, sans-serif;
+  color: var(--color-success);
+  font-weight: bolder;
+  border-radius: 4px;
+  font-size: small;
+  padding: .2rem .2em;
 }
 
 #order_widget tr:nth-child(even) td {
-    background-color: var(--color-lightGrey);
+  background-color: var(--color-lightGrey);
 }
 
 #order_widget tr:nth-child(odd) td {
-    background-color: white;
+  background-color: white;
 }
 
 img.outline {
-    color:  var(--color-primary);
-    border: 1px solid var(--color-primary);
-    border-radius: 4px;
-    cursor: pointer;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: 4px;
+  cursor: pointer;
 }
 
-#email_order_layer, #last_order_layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    right: 0;
-    z-index: 3;
-    background-color: rgba(250, 250, 250, 0.80);
+#email_order_layer,
+#last_order_layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 3;
+  background-color: rgba(250, 250, 250, 0.80);
 }
 
-#last_order_items td, 
-#last_order_table td {
-    font-family: sans-serif;
+#last_order_items div {
+  font-family: sans-serif;
 }
+
 /*
 */
-#order_help h5, #order_help h6 {
-    margin: 0.35rem 0 0 0;
+
+#order_help h5,
+#order_help h6 {
+  margin: 0.35rem 0 0 0;
 }
+
 #email_order_form input:invalid {
   border: red solid 2px;
 }
+
 #order_help p {
-    font-family: Veleka, serif;
+  font-family: Veleka, serif;
 }
+
 #order_help {
-    z-index:4;
-    position: absolute;
-    top: 0;
-    left: 30%;
-    right: 30%;
+  z-index: 4;
+  position: absolute;
+  top: 0;
+  left: 30%;
+  right: 30%;
+}
+
+#last_order_table div.col:first-child {
+  font-weight: bolder;
+}
+
+#last_order_table div.col:nth-child(2) {
+  font-weight: normal;
+  font-family: sans-serif;
 }
 
 @media (max-width: 700px) {
-    /* .plus, .minus,.remove images as buttons */
-    #order_widget img.outline {
-        width: 32px;
-    }
-    #order_widget>table>tfoot th:nth-last-child(1),
-    #order_widget>table>tbody td:nth-last-child(1) {
-        max-width: 5rem;
-    }
-    #order_widget>table>tfoot th:nth-last-child(4),
-    #order_widget>table>tbody td:nth-last-child(4) {
-       max-width: 10rem; 
-    }
-    .remove {
-        display: none;
-    }
-    #order_help {
-        top: 0;
-        left: 0;
-        right: 0;
-    }
-} /* end @media (max-width: 700px) */
+  /* .plus, .minus,.remove images as buttons */
+
+  #order_widget img.outline {
+    width: 32px;
+  }
+
+  #last_order_items th:nth-last-child(1),
+  #last_order_items td:nth-last-child(1),
+  #order_widget>table>tfoot th:nth-last-child(1),
+  #order_widget>table>tbody td:nth-last-child(1) {
+    max-width: 5rem;
+  }
+
+  #last_order_items th:first-child,
+  #last_order_items td:nth-last-child(1),
+  #order_widget>table>tfoot th:nth-last-child(4),
+  #order_widget>table>tbody td:nth-last-child(4) {
+    max-width: 10rem;
+  }
+
+  .remove {
+    display: none;
+  }
+
+  #order_help {
+    top: 0;
+    left: 0;
+    right: 0;
+  }
+}
+/* end @media (max-width: 700px) */
 
 @@ js/cart.js
 /* An unobtrusive shopping cart based on localStorage
@@ -479,8 +563,8 @@ jQuery(function ($) {
 <thead><tr><th>Изделие</th><th>Ед. цена</th><th>Бр.</th><th><!-- action --></th></tr></thead>
 <tbody><!-- Here will be the order items --></tbody>
 <tfoot>
-<tr><th>
-Общо (лв.)</th><th class="order_total"></th>
+<tr><th>Тегло (кг.)</th><th class="order_weight"></th><th></th>
+<tr><th>Общо (лв.)</th><th class="order_total"></th>
 <th>
     <button class="button primary outline icon cart pull-left"
         title="Отказ от поръчката" id="cancel_order"><img 
@@ -519,11 +603,10 @@ title="Телефонен номер, на който ще бъдете изве
 <select name="deliverer" title="Изберете кой от доставчиците, с които работим, предпочитате. При закупуване на невеществени изделия, ще изпратим връзка за изтегляне и банкова сметка, на която да преведете сумата по поръчката.">
     <option value="email">Е-поща (за електронни издания и софтуер)</option>
     <option value="econt">Еконт</option>
-    <option value="speedy">Спиди</option>
 </select>
 <label for="address">Адрес за получаване</label>
 <input type="text" name="address" placeholder="п.к. 3210 с. Горно Нанадолнище, ул. „Цветуша“ №123" maxlength="155"
-title="Вашият точен адрес за получаване на пратката или адрес на офис на избрания доставчик. При закупуване на невеществени изделия и услуги това поле не е задължително." />
+title="Вашият точен адрес за получаване на пратката или адрес на офис на избрания доставчик. При закупуване на невеществени изделия и услуги това поле не се попълва." />
 <label for="notes">Допълнителни бележки</label>
 <textarea name="notes" rows="2" maxlength="255"
 title="Ако желаете да добавите някакви подробности и уточнения, въведете ги в това поле."></textarea>
@@ -546,19 +629,18 @@ title="Ако желаете да добавите някакви подробн
     <p>Вашата поръчка е приета. На електронната ви поща ще изпратим номера на
     товарителницата, с който можете да проследите пратката. Също така ще бъдете
     уведомени своевременно от превозвача, когато вашата пратка пристигне.</p>
-        <table id="last_order_table">
-            <tr><th>Поръчка:</th><td id="id"></td></tr>
-            <tr><th>Товарителница:</th><td id="way_bill_id"></td></tr>
-            <tr><th>Получател:</th><td id="recipient_names"></td></tr>
-            <tr><th>E-поща:</th><td id="email"></td></tr>
-            <tr><th>Телефон:</th><td id="phone"></td></tr>
-            <tr><th>Предпочетен доставчик:</th><td id="deliverer"></td></tr>
-            <tr><th>Адрес за получаване:</th><td id="address"></td></tr>
-            <tr><th>Допълнителни бележки:</th><td id="notes"></td></tr>
-        </table>
-        <table id="last_order_items">
+        <section id="last_order_table">
+            <div class="row"><div class="col">Поръчка:</div><div class="col" id="id"></div></div>
+            <div class="row"><div class="col">Получател:</div><div class="col" id="recipient_names"></div></div>
+            <div class="row"><div class="col">E-поща:</div><div class="col" id="email"></div></div>
+            <div class="row"><div class="col">Телефон:</div><div class="col" id="phone"></div></div>
+            <div class="row"><div class="col">Предпочетен доставчик:</div><div class="col" id="deliverer"></div></div>
+            <div class="row"><div class="col">Адрес за получаване:</div><div class="col" id="address"></div></div>
+            <div class="row"><div class="col">Допълнителни бележки:</div><div class="col" id="notes"></div></div>
+        </div>
+        <table id="last_order_items" class="card">
             <cation class="text-center">Изделия</caption>
-
+            <tbody></tbody>
         </table>
   <footer class="is-center">
     <button class="button primary hide_last_order">Добре</button>
@@ -584,6 +666,7 @@ title="Ако желаете да добавите някакви подробн
                 id: product.id,
                 title: product.title,
                 quantity: 1,
+                weight: product.weight,
                 price: product.price
             };
         }
@@ -627,11 +710,16 @@ title="Ако желаете да добавите някакви подробн
         }
         // calculate the sum of the items in the cart
         let sum = 0;
-        Object.keys(cart).forEach((curr) => sum += cart[curr].price * cart[curr].quantity);
+        let weight = 0;
+        Object.keys(cart).forEach((key) => {
+            weight += cart[key].weight * cart[key].quantity;
+            sum += cart[key].price * cart[key].quantity;
+        });
         // VAT is included in the price
         $('.order_total').html(sum.toFixed(2));
-        $('#cancel_order').click(cancel_order);
+        $('.order_weight').html(weight.toFixed(3));
 
+        $('#cancel_order').click(cancel_order);
         $('#email_order').click(show_email_order);
     } // end function show_order()
 
@@ -793,19 +881,22 @@ ${response}
                 $(`#last_order_table #${k}`).html(order_data[k]);
         }
         let order_sum = 0;
+        let order_weight = 0;
         let items = order_data.items;
         for (const it of items) {
             let item_sum = it.price * it.quantity;
             order_sum += item_sum;
-            $('#last_order_items').append(`
+            order_weight += it.weight * it.quantity;
+
+            $('#last_order_items tbody').append(`
                   <tr>
-                    <th title="${it.title}">${it.title}</th>
-                    <td>${it.price}</td><td>${it.quantity} бр.</td><td>${item_sum}</td>
+                    <th title="${it.title}">${it.title}</th><td>${it.price}</td><td>${it.quantity} бр.</td><td>${item_sum}</td>
                   </tr>
             `);
 
         }
-        $('#last_order_items').append(`<tr><th colspan="3">Общо</th><td>${order_sum}</td></tr>`);
+        $('#last_order_items').append(`<tfoot><tr><th colspan="3">Общо</th><td>${order_sum}</td></tr><tfoot>`);
+        $('#last_order_items').append(`<tfoot><tr><th colspan="3">Тегло</th><td>${order_weight}</td></tr><tfoot>`);
         $('.hide_last_order').click(() => $('#last_order_layer').hide());
         $('#last_order_layer').show();
     } // end function display_last_order

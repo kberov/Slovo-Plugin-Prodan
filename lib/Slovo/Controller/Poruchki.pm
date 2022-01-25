@@ -24,5 +24,12 @@ sub list_by_last_order ($c) {
 
 
 }
+
+# GET /api/shop
+# provides shipment data to the page on which the form for shipping the
+# collected goods in the cart is called.
+sub shop ($c) {
+    return $c->render(openapi => $c->config->{shop}, status => 200);
+}
 1;
 
