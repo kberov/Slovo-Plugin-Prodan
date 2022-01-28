@@ -29,7 +29,15 @@ sub list_by_last_order ($c) {
 # provides shipment data to the page on which the form for shipping the
 # collected goods in the cart is called.
 sub shop ($c) {
-    return $c->render(openapi => $c->config->{shop}, status => 200);
+    # TODO: some logic to use the right shop. We may have multiple
+    # shops(physical stores) from which we send the orders.  For example we may
+    # choose the shop depending on the IP-location of the user. We want to use
+    # the closest store to the user to minimise delivery expenses.
+    # Copy data
+    state $shop = {%{$c->config->{shop}}};
+    delete $shop->{private_key};
+
+    return $c->render(openapi => $shop, status => 200);
 }
 1;
 

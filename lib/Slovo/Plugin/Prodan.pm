@@ -463,6 +463,7 @@ img.outline {
   cursor: pointer;
 }
 
+#econt_order_layer,
 #email_order_layer,
 #last_order_layer {
   position: absolute;
@@ -510,6 +511,11 @@ img.outline {
   font-weight: normal;
   font-family: sans-serif;
 }
+/*econt form iframe*/
+iframe#econt_shipment {
+    width:  100%;
+    height: 45rem; 
+}
 
 @media (max-width: 700px) {
   /* .plus, .minus,.remove images as buttons */
@@ -522,7 +528,8 @@ img.outline {
   #last_order_items td:nth-last-child(1),
   #order_widget>table>tfoot th:nth-last-child(1),
   #order_widget>table>tbody td:nth-last-child(1) {
-    max-width: 5rem;
+    max-width:  5rem;
+    text-align: end;
   }
 
   #last_order_items th:first-child,
@@ -544,6 +551,7 @@ img.outline {
 }
 /* end @media (max-width: 700px) */
 
+
 @@ js/cart.js
 /* An unobtrusive shopping cart based on localStorage
  * Formatted with `js-beautify -j -r -f lib/Slovo/resources/public/js/cart.js`
@@ -554,6 +562,7 @@ jQuery(function ($) {
     let cart = localStorage.cart ? JSON.parse(localStorage.cart) : {};
     let order = localStorage.order ? JSON.parse(localStorage.order) : {};
     let last_order = localStorage.last_order ? JSON.parse(localStorage.last_order) : {};
+
     const order_widget_template = `
 <div id="order_widget" class="card text-center">
 <button class="button primary outline icon cart" title="Показване/Скриване на поръчката"
@@ -563,7 +572,7 @@ jQuery(function ($) {
 <thead><tr><th>Изделие</th><th>Ед. цена</th><th>Бр.</th><th><!-- action --></th></tr></thead>
 <tbody><!-- Here will be the order items --></tbody>
 <tfoot>
-<tr><th>Тегло (кг.)</th><th class="order_weight"></th><th></th>
+<tr><th>Тегло (кг.)</th><th class="order_weight"></th><th></th><th></th>
 <tr><th>Общо (лв.)</th><th class="order_total"></th>
 <th>
     <button class="button primary outline icon cart pull-left"
@@ -571,14 +580,19 @@ jQuery(function ($) {
             src="/img/cart-off.svg" width="32" /></button>
 </th>
 <th>
-<button class="button primary icon cart"
-title="Купувам" id="email_order"><img src="/img/cart-check.svg" width="32" /></button>
+    <button class="button primary outline icon cart"
+    title="Купувам (Доставка с Еконт)" id="econt_order"><img
+        src="/img/econt.svg" width="32" /></button>
+   <button class="button primary icon cart"
+        title="Купувам" id="email_order"><img
+            src="/img/cart-check.svg" width="32" /></button>
 </th>
 </tr>
 </tfoot>
 </table>
 </div>
 `;
+
     const email_order_template = `
 <div id="email_order_layer" style="display:none">
 <form id="email_order_form" method="POST" action="/api/poruchki" class="container">
@@ -619,6 +633,31 @@ title="Ако желаете да добавите някакви подробн
 </footer>
 </fieldset>
 </form>
+</div>
+`;
+    const econt_order_template = `
+<div id="econt_order_layer" style="display:none">
+<div id="econt_order_form" class="container">
+    <fieldset class="card">
+    <legend data-description="">Поръчка (Доставка с Еконт)</legend>
+        <button class="button outline icon cart pull-right" title="Скриване на формуляра"
+            id="hide_econt_order"><span 
+                class="order_total"></span><img 
+                src="/img/arrow-collapse-all.svg" width="32" /></button>
+        <p>Повечето от полетата, които попълвате тук,
+        съдържат лични данни. Предоставяте ги на „Еконт Експрес“ ООД за целите на доставката.</p>
+
+    <!-- ФОРМА ЗА ДОСТАВКА -->
+    <iframe id="econt_shipment" src=""></iframe>
+     
+    <!-- В това поле ще се запази уникален индентификатор на адреса за доставка.
+    Попълва се от JavaScript функцията която 'слуша' съобщенията от формата за
+    доставка -->
+    <input type="hidden" name="customerInfo[id]">
+
+
+    </fieldset>
+</div>
 </div>
 `;
     const last_order_template = `
@@ -702,6 +741,15 @@ title="Ако желаете да добавите някакви подробн
             // append the email_order_form
             if (!$('#email_order_layer').length)
                 $('body').append(email_order_template);
+            // append the econt_order_template
+            if (!$('#econt_order_layer').length){
+                // get the shop data from the serer
+                //
+                //
+                $('body').append(econt_order_template);
+                //prepare the url to the econt iframe
+            }
+
 
         }
         //else update it
@@ -720,11 +768,12 @@ title="Ако желаете да добавите някакви подробн
         $('.order_weight').html(weight.toFixed(3));
 
         $('#cancel_order').click(cancel_order);
+        $('#econt_order').click(show_econt_order);
+        // Display an order form and handle data collection from the user 
         $('#email_order').click(show_email_order);
     } // end function show_order()
 
     function populate_order_table() {
-        console.log(`this: `, this);
         let this_id = this;
         let ow_jq = '#order_widget>table>tbody';
         $(ow_jq).append(`
@@ -779,6 +828,51 @@ title="Ако желаете да добавите някакви подробн
         else
             order_button_icon.attr('src', '/img/cart.svg');
         $('#order_widget>h3,#order_widget>table').toggle();
+    }
+
+    function show_econt_order(){
+
+        $('#econt_order_layer').show();
+        let hide = $('#hide_econt_order');
+        hide.off('click');
+        hide.click(function (e) {
+            $('#econt_order_layer').hide();
+            e.preventDefault();
+        });
+        get_set_shop_data();
+
+    }// end function show_econt_order()
+    
+    function get_set_shop_data(){
+        $.get('/api/shop').done(function(data){
+            //console.log(data);
+            $('#econt_shipment').prop('src', prepare_shipment_url(data));
+
+        }).fail(function(data){
+            alert('ГРЕШКА: \n' + data.responseText);
+        });
+    
+    }
+
+    // https://www.econt.com/developers/44-implementirane-na-dostavi-s-ekont-v-elektronniya-vi-magazin.html
+    function prepare_shipment_url(shop){
+        let shipment = {
+            id_shop: shop.shop_id,
+            order_currency: shop.shop_currency,
+            order_total: $('#order_widget table>tfoot .order_total').text(),
+            order_weight: $('#order_widget table>tfoot .order_weight').text(),
+            // Get user data from localStorage from previous time if exists
+            customer_company: order.recipient_names,
+            customer_phone: order.phone,
+            "customer_e-mail": order.email,
+            customer_country: 1033,
+            customer_address: order.address,
+            ignore_history: false,
+            confirm_txt: 'Доставка'
+        };
+        let params = $.param(shipment, true);
+        //alert(params);
+        return `${shop.shippment_calc_url}?${params}`;
     }
 
     function show_email_order() {
@@ -847,6 +941,7 @@ title="Ако желаете да добавите някакви подробн
                 order[$(this).prop('name')] = $(this).val();
         });
         order.items = [];
+        // Put the cart items as order items
         Object.keys(cart).forEach((curr) => order.items.push(cart[curr]));
         $.post($(fo).prop('action'), JSON.stringify(order), function (data, status) {
             if (status === 'success') {
@@ -902,6 +997,7 @@ ${response}
     } // end function display_last_order
 
 });
+
 @@ img/arrow-collapse-all.svg
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="24" height="24" viewBox="0 0 24 24"><path d="M19.5,3.09L20.91,4.5L16.41,9H20V11H13V4H15V7.59L19.5,3.09M20.91,19.5L19.5,20.91L15,16.41V20H13V13H20V15H16.41L20.91,19.5M4.5,3.09L9,7.59V4H11V11H4V9H7.59L3.09,4.5L4.5,3.09M3.09,19.5L7.59,15H4V13H11V20H9V16.41L4.5,20.91L3.09,19.5Z" /></svg>
 @@ img/cart.svg
