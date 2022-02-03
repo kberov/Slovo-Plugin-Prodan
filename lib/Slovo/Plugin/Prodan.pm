@@ -124,7 +124,7 @@ sub _definitions {
                       ' Id of the new order, returend with the response to the user-agent(browser)',
                     type => 'integer',
                 },
-                recipient_names => {
+                name => {
                     maxLength => 100,
                     type      => 'string'
                 },
@@ -172,6 +172,9 @@ sub _definitions {
                     type      => 'string'
                 },
                 quantity => {
+                    type     => 'integer'
+                },
+                weight => {
                     type     => 'integer'
                 },
                 price => {
@@ -370,6 +373,7 @@ __DATA__
 
 @@ css/cart.css
 /* cd ~/opt/dev/Slovo && beautify-css -p  domove/xn--b1arjbl.xn--90ae/public/css/cart.css */
+
 @charset "utf-8";
 
 #show_order {
@@ -416,14 +420,18 @@ __DATA__
   text-align: right;
 }
 
+#econt_order_items>thead th:nth-last-child(3),
+#econt_order_items>tfoot th:nth-last-child(3),
+#econt_order_items>tbody td:nth-last-child(3),
 #order_widget>table>thead th:nth-last-child(3),
 #order_widget>table>tfoot th:nth-last-child(3),
 #order_widget>table>tbody td:nth-last-child(3) {
   max-width: 7rem;
   white-space: nowrap;
-  text-align: right;
+  text-align: end;
 }
 
+#econt_order_items>tbody th:first-child,
 #order_widget>table>tfoot th:nth-last-child(4),
 #order_widget>table>tbody td:nth-last-child(4) {
   max-width: 40rem;
@@ -511,10 +519,26 @@ img.outline {
   font-weight: normal;
   font-family: sans-serif;
 }
+
 /*econt form iframe*/
+
 iframe#econt_shipment {
-    width:  100%;
-    height: 45rem; 
+  width: 100%;
+  height: 600px;
+}
+
+#econt_order_layer .card {
+  padding: 1rem;
+}
+
+#econt_order_items th,
+#econt_order_items td,
+#order_widget th,
+#order_widget td,
+#last_order_layer th,
+#last_order_layer td {
+  padding: 0.5rem !important;
+  line-height: 85%;
 }
 
 @media (max-width: 700px) {
@@ -524,15 +548,24 @@ iframe#econt_shipment {
     width: 32px;
   }
 
+  #econt_order_items th:nth-last-child(1),
+  #econt_order_items td:nth-last-child(1),
+  #econt_order_items tbody th:nth-last-child(2),
+  #econt_order_items tbody td:nth-last-child(2),
+  #econt_order_items tbody th:nth-last-child(3),
+  #econt_order_items tbody td:nth-last-child(3),
   #last_order_items th:nth-last-child(1),
   #last_order_items td:nth-last-child(1),
   #order_widget>table>tfoot th:nth-last-child(1),
   #order_widget>table>tbody td:nth-last-child(1) {
-    max-width:  5rem;
+    max-width: 5rem;
     text-align: end;
   }
 
+  #econt_order_items>tbody th:first-child,
   #last_order_items th:first-child,
+  #econt_order_items th:first-child,
+  #econt_order_items td:first-child,
   #last_order_items td:nth-last-child(1),
   #order_widget>table>tfoot th:nth-last-child(4),
   #order_widget>table>tbody td:nth-last-child(4) {
@@ -549,8 +582,8 @@ iframe#econt_shipment {
     right: 0;
   }
 }
-/* end @media (max-width: 700px) */
 
+/* end @media (max-width: 700px) */
 
 @@ js/cart.js
 /* An unobtrusive shopping cart based on localStorage
@@ -561,7 +594,6 @@ jQuery(function ($) {
     // cart will go finally to order.items
     let cart = localStorage.cart ? JSON.parse(localStorage.cart) : {};
     let order = localStorage.order ? JSON.parse(localStorage.order) : {};
-    let last_order = localStorage.last_order ? JSON.parse(localStorage.last_order) : {};
 
     const order_widget_template = `
 <div id="order_widget" class="card text-center">
@@ -572,7 +604,7 @@ jQuery(function ($) {
 <thead><tr><th>Изделие</th><th>Ед. цена</th><th>Бр.</th><th><!-- action --></th></tr></thead>
 <tbody><!-- Here will be the order items --></tbody>
 <tfoot>
-<tr><th>Тегло (кг.)</th><th class="order_weight"></th><th></th><th></th>
+<tr><th>Тегло (кг.)</th><th class="order_weight"></th><th></th><th></th></tr>
 <tr><th>Общо (лв.)</th><th class="order_total"></th>
 <th>
     <button class="button primary outline icon cart pull-left"
@@ -580,14 +612,16 @@ jQuery(function ($) {
             src="/img/cart-off.svg" width="32" /></button>
 </th>
 <th>
-    <button class="button primary outline icon cart"
+    <button class="button primary primary icon cart"
     title="Купувам (Доставка с Еконт)" id="econt_order"><img
-        src="/img/econt.svg" width="32" /></button>
+        src="/img/cart-check.svg" width="32" /></button><!--
    <button class="button primary icon cart"
         title="Купувам" id="email_order"><img
-            src="/img/cart-check.svg" width="32" /></button>
+            src="/img/cart-check.svg" width="32" /></button> -->
 </th>
 </tr>
+<tr title="* При поръчка над 30 лв до офис на Еконт или Еконтомат, доставката е за наша сметка.">
+<th colspan="4">* При поръчка над 30 лв до офис на Еконт или Еконтомат, доставката е за наша сметка.</th>
 </tfoot>
 </table>
 </div>
@@ -637,25 +671,31 @@ title="Ако желаете да добавите някакви подробн
 `;
     const econt_order_template = `
 <div id="econt_order_layer" style="display:none">
-<div id="econt_order_form" class="container">
-    <fieldset class="card">
-    <legend data-description="">Поръчка (Доставка с Еконт)</legend>
+<div  class="container card">
+<form id="econt_order_form" method="POST" action="/api/poruchki">
         <button class="button outline icon cart pull-right" title="Скриване на формуляра"
-            id="hide_econt_order"><span 
-                class="order_total"></span><img 
+            id="hide_econt_order"><img 
                 src="/img/arrow-collapse-all.svg" width="32" /></button>
-        <p>Повечето от полетата, които попълвате тук,
-        съдържат лични данни. Предоставяте ги на „Еконт Експрес“ ООД за целите на доставката.</p>
+    <h4><img src="/img/econt.svg" width="24" /> Поръчка (Доставка с Еконт)</h4>
 
-    <!-- ФОРМА ЗА ДОСТАВКА -->
-    <iframe id="econt_shipment" src=""></iframe>
-     
     <!-- В това поле ще се запази уникален индентификатор на адреса за доставка.
     Попълва се от JavaScript функцията която 'слуша' съобщенията от формата за
     доставка -->
     <input type="hidden" name="customerInfo[id]">
 
-
+    <input type="hidden" name="cod" value="Да" readonly="" />
+        <table id="econt_order_items">
+            <cation class="text-center">Изделия</caption>
+            <tbody></tbody>
+            <tfoot></tfoot>
+        </table>
+</form>
+    <!-- ФОРМА ЗА ДОСТАВКА -->
+    <fieldset>
+        <legend>Данни за доставка</legend>
+        <p>Повечето от полетата, които попълвате тук,
+        съдържат лични данни. Предоставяте ги на „Еконт Експрес“ ООД за да извърши доставката.</p>
+    <iframe id="econt_shipment" src=""></iframe>
     </fieldset>
 </div>
 </div>
@@ -665,21 +705,21 @@ title="Ако желаете да добавите някакви подробн
     <div class="container card">
         <button class="button outline icon cart pull-right hide_last_order"
         title="Скриване"><span class="order_total"></span><img src="/img/arrow-collapse-all.svg" width="32" /></button>
-    <p>Вашата поръчка е приета. На електронната ви поща ще изпратим номера на
-    товарителницата, с който можете да проследите пратката. Също така ще бъдете
-    уведомени своевременно от превозвача, когато вашата пратка пристигне.</p>
+    <p>Вашата поръчка е приета. Ще бъдете уведомени своевременно от превозвача, когато вашата пратка пристигне.</p>
         <section id="last_order_table">
-            <div class="row"><div class="col">Поръчка:</div><div class="col" id="id"></div></div>
-            <div class="row"><div class="col">Получател:</div><div class="col" id="recipient_names"></div></div>
+            <div class="row"><div class="col">Поръчка №:</div><div class="col" id="id"></div></div>
+            <div class="row"><div class="col">Получател:</div><div class="col" id="name"></div></div>
             <div class="row"><div class="col">E-поща:</div><div class="col" id="email"></div></div>
             <div class="row"><div class="col">Телефон:</div><div class="col" id="phone"></div></div>
-            <div class="row"><div class="col">Предпочетен доставчик:</div><div class="col" id="deliverer"></div></div>
-            <div class="row"><div class="col">Адрес за получаване:</div><div class="col" id="address"></div></div>
-            <div class="row"><div class="col">Допълнителни бележки:</div><div class="col" id="notes"></div></div>
-        </div>
-        <table id="last_order_items" class="card">
+            <div class="row"><div class="col">Доставчик:</div><div class="col" id="deliverer"></div></div>
+            <div class="row"><div class="col">Адрес за получаване:</div>
+                <div class="col"><span id="city_name"></span><span id="address"></span></div>
+            </div>
+            <!-- <div class="row"><div class="col">Допълнителни бележки:</div><div class="col" id="notes"></div></div> -->
+        <table id="last_order_items">
             <cation class="text-center">Изделия</caption>
             <tbody></tbody>
+            <tfoot></tfoot>
         </table>
   <footer class="is-center">
     <button class="button primary hide_last_order">Добре</button>
@@ -725,6 +765,7 @@ title="Ако желаете да добавите някакви подробн
     }
 
     function show_order() {
+        show_last_order_button();
         // there is nothing to show? return.
         if (!Object.keys(cart).length) return;
 
@@ -742,35 +783,36 @@ title="Ако желаете да добавите някакви подробн
             if (!$('#email_order_layer').length)
                 $('body').append(email_order_template);
             // append the econt_order_template
-            if (!$('#econt_order_layer').length){
-                // get the shop data from the serer
-                //
-                //
+            if (!$('#econt_order_layer').length)
                 $('body').append(econt_order_template);
-                //prepare the url to the econt iframe
-            }
-
-
         }
         //else update it
         else {
             repopulate_order_table();
         }
-        // calculate the sum of the items in the cart
+        // calculate the sums of the order from the items and rules in the cart
         let sum = 0;
         let weight = 0;
         Object.keys(cart).forEach((key) => {
             weight += cart[key].weight * cart[key].quantity;
             sum += cart[key].price * cart[key].quantity;
         });
-        // VAT is included in the price
+        /*
+        const delivery_price = 4.00; // in he shop currency. Todo: make this a configuration value of the shop.
+        const free_delivery_sum = 30;
+        // VAT and delivery_price are included in the price if total sum < 30
+        if (sum > free_delivery_sum)
+            $('th.delivery_price').text(0.00.toFixed(2));
+        else
+            $('th.delivery_price').text(delivery_price.toFixed(2));
+        */
         $('.order_total').html(sum.toFixed(2));
         $('.order_weight').html(weight.toFixed(3));
 
         $('#cancel_order').click(cancel_order);
         $('#econt_order').click(show_econt_order);
         // Display an order form and handle data collection from the user 
-        $('#email_order').click(show_email_order);
+        //$('#email_order').click(show_email_order);
     } // end function show_order()
 
     function populate_order_table() {
@@ -830,8 +872,7 @@ title="Ако желаете да добавите някакви подробн
         $('#order_widget>h3,#order_widget>table').toggle();
     }
 
-    function show_econt_order(){
-
+    function show_econt_order() {
         $('#econt_order_layer').show();
         let hide = $('#hide_econt_order');
         hide.off('click');
@@ -841,40 +882,240 @@ title="Ако желаете да добавите някакви подробн
         });
         get_set_shop_data();
 
-    }// end function show_econt_order()
-    
-    function get_set_shop_data(){
-        $.get('/api/shop').done(function(data){
-            //console.log(data);
-            $('#econt_shipment').prop('src', prepare_shipment_url(data));
+    } // end function show_econt_order()
 
-        }).fail(function(data){
-            alert('ГРЕШКА: \n' + data.responseText);
-        });
-    
+    function get_set_shop_data() {
+        let shop_data = localStorage.shop_data ? JSON.parse(localStorage.shop_data) : {
+            retrieved: 1
+        };
+        let now = parseInt(Date.now() / 1000); // get seconds since 1970
+        let eco_shipment = $('#econt_shipment');
+        let items = [];
+        Object.keys(cart).forEach((key) => items.push(cart[key]));
+        inline_order_items('#econt_order_items', items);
+        order.items = items;
+        // Get fresh shop_data not older than 2 hours and do not get shop data
+        // on each display of order checkout, because shop_data may change on the server.
+        if ((now - shop_data.retrieved) < 3600 * 2) {
+            if (!eco_shipment.prop('src').match(new RegExp(shop_data.shop_id))) {
+                eco_shipment.prop('src', prepare_shipment_url(shop_data));
+                handle_econt_order_form();
+            }
+        } else {
+            $.get('/api/shop').done(function (data) {
+                data.retrieved = now;
+                localStorage.setItem('shop_data', JSON.stringify(data));
+                eco_shipment.prop('src', prepare_shipment_url(data));
+                handle_econt_order_form();
+            }).fail(function (data) {
+                alert('ГРЕШКА: \n' + data.responseText);
+            });
+        }
     }
 
     // https://www.econt.com/developers/44-implementirane-na-dostavi-s-ekont-v-elektronniya-vi-magazin.html
-    function prepare_shipment_url(shop){
+    function prepare_shipment_url(shop) {
+        const country_code = 1033; // Bulgaria
         let shipment = {
+            // Get user data from localStorage from previous time if it exists
+            customer_company: order.name,
+            customer_name: order.face,
+            customer_phone: order.phone,
+            customer_email: order.email,
+            customer_country: (order.id_country ? order.id_country : country_code),
+            customer_post_code: order.post_code,
+            customer_office_code: order.office_code,
+            customer_address: order.address,
             id_shop: shop.shop_id,
             order_currency: shop.shop_currency,
-            order_total: $('#order_widget table>tfoot .order_total').text(),
-            order_weight: $('#order_widget table>tfoot .order_weight').text(),
-            // Get user data from localStorage from previous time if exists
-            customer_company: order.recipient_names,
-            customer_phone: order.phone,
-            "customer_e-mail": order.email,
-            customer_country: 1033,
+            order_total: parseFloat($('#order_widget table>tfoot .order_total').text()),
+            order_weight: parseFloat($('#order_widget table>tfoot .order_weight').text()),
             customer_address: order.address,
-            ignore_history: false,
+            ignore_history: 0,
             confirm_txt: 'Доставка'
         };
         let params = $.param(shipment, true);
-        //alert(params);
         return `${shop.shippment_calc_url}?${params}`;
     }
 
+    //2.3. JavaScript функця, която получава резултата от формата за доставка:
+    function handle_econt_order_form() {
+        const currency = {
+            BGN: 'лв.',
+            EUR: 'евро'
+        };
+        // Елемент от кода, където е указано дали стоката ще се заплаща с НП или не
+        var codInput = document.getElementsByName('cod')[0];
+        //Елемент от формата в който ще се постави уникалното ID на доставката
+        var customerInfoIdInput = document.getElementsByName('customerInfo[id]')[0];
+        //Формата в която се съдържат данните по поръчката в магазина и същата трябва да се подаде
+        var econt_order_form = document.getElementById('econt_order_form');
+        // добавяне на функция, която 'слуша' данни връщани от формите за доставка
+        window.addEventListener('message', function (message) {
+            // Данни връщани от формата за доставка:
+            // id: уникално ID на адреса. Това поле трябва да бъде поставено в скритото customerInfo[id]
+            // id_country: ID на държавата
+            // zip: зип код на населеното място
+            // post_code: пощенски код на населеното място
+            // city_name: населено място
+            // office_code: код на офиса на Еконт ако бъде избран такъв
+            // address: адрес
+            // name: име / фирма
+            // face: лице
+            // phone: телефон
+            // email: имейл
+            // shipping_price: цена на пратката без НП
+            // shipping_price_cod: цена на пратката с НП
+            // shipping_price_currency: валута на калкулираната цена
+            // shipment_error: поясняващ текст ако е възникнала грешка
+
+            let data = message['data'];
+            if (data.office_code) {
+                delete data.num;
+                data.address = data.office_name;
+                delete data.street;
+                delete data.other;
+                delete data.quarter;
+                // todo: get the office address somehow (via some API call) to show it to the user
+                // data.address = $(`option[value=${data.office_code}]`, document.getElementById('econt_shipment').contentWindow.document).text();
+            }
+
+            order = {
+                ...data,
+                items: order.items,
+                deliverer: 'econt',
+                sum: parseFloat($('#order_widget table>tfoot .order_total').text()),
+                weight: parseFloat($('#order_widget table>tfoot .order_weight').text())
+            };
+
+            localStorage.setItem('order', JSON.stringify(order));
+
+            // възможно е да възникнат грешки при неправилно конфигурирани настройки на електронния магазин, които пречат за калкулацията
+            if (data['shipment_error'] && data['shipment_error'] !== '')
+                alert('Възникна грешка при изичисляване на стройноста на пратката');
+
+            // формата за калкулация връща цена с НП и такава без
+            // спрямо избора на клиента в "Заплащане чрез НП" показваме правилната цена
+            let shippmentPrice;
+
+            if (codInput) shippmentPrice = parseFloat(data['shipping_price_cod']);
+            else shippmentPrice = parseFloat(data['shipping_price']);
+            $('#econt_order_items tfoot>tr:last-child>td').replaceWith(`${shippmentPrice.toFixed(2)} ${currency[data['shipping_price_currency']]}`);
+            let confirmMessage =
+                `Куриерската ви услуга е на стройност ${shippmentPrice} ${currency[data['shipping_price_currency']]}
+Наложеният платеж е на стойност ${order.sum} ${currency[data['shipping_price_currency']]}
+Общо: ${shippmentPrice + order.sum} ${currency[data['shipping_price_currency']]}
+Потвърждавате ли покупката?`;
+            if (confirm(confirmMessage)) {
+                //customerInfoIdInput.value = data['id'];
+                // confirmForm.submit();
+                place_econt_order(econt_order_form)
+            }
+        }, false);
+    }
+
+    /* Inline order items into econt_order_template or last_order_template */
+    function inline_order_items(table_id, items) {
+        let tbody = $(`${table_id} tbody`);
+        let tfoot = $(`${table_id} tfoot`);
+        tbody.empty();
+        tfoot.empty();
+        let sum = 0;
+        let weight = 0;
+        for (const it of items) {
+            let item_sum = it.price * it.quantity;
+            sum += item_sum;
+            weight += it.weight * it.quantity;
+            tbody.append(`
+                  <tr>
+                    <th title="${it.title}">${it.title}</th><td>${it.price}</td><td>${it.quantity} бр.</td><td>${item_sum.toFixed(2)}</td>
+                  </tr>
+            `);
+        }
+        tfoot.append(`<tr><th colspan="3">Общо</th><td>${sum.toFixed(2)} лв.</td></tr>`);
+        tfoot.append(`<tr><th colspan="3">Тегло</th><td>${weight.toFixed(3)} кг.</td></tr>`);
+        tfoot.append(`<tr><th colspan="3">Доставка</th><td></td></tr>`);
+    }
+    /*
+     * 3. Генериране/редактиране на поръчка към "Достави с Еконт" http://delivery.econt.com/services/
+     * Услугата може да бъде извикана в следните случаи:
+     * - При завършване на поръчката от клиента;
+     * - При редактиране на поръчката от търговеца в рамките на административния си панел; 
+     */
+    // Приключване на поръчката.
+    function place_econt_order(form) {
+        $.post($(form).prop('action'), JSON.stringify({
+            Poruchka: order
+        }), function (data, status) {
+            if (status === 'success') {
+                // store the order for showing later too
+                localStorage.setItem('order', JSON.stringify(data));
+                order = data; // last order
+                delete_cart();
+                $('#econt_order_layer').hide();
+                show_last_order(data);
+            } else {
+                let response = JSON.stringify(data);
+                alert(`
+Нещо се обърка на сървъра.
+Опитайте да изпратите поръчката си на poruchki@studio-berov.eu.
+Молим, изпратете снимка на екрана си, за да ни
+улесните в отстраняването на грешката.
+Следва отговорът от сървъра.
+${response}
+`);
+            }
+        }, 'json');
+    } // end place_econt_order(form)
+    /**
+     * Displays the just made or last order to the user 
+     */
+    function show_last_order(order_data) {
+        let lol = '#last_order_layer';
+        $(lol).remove();
+        $('body').append(last_order_template);
+        let delivery = ['id', 'name', 'email', 'phone', 'deliverer', 'office_name', 'address'];
+        console.log(order_data)
+        for (const k of delivery) {
+            if (order_data[k])
+                $(`#last_order_table #${k}`).text(order_data[k]);
+        }
+        inline_order_items('#last_order_items', order_data.items);
+        if (order_data.email)
+            $(`${lol} p:first-child`).append(`На електронната ви поща ще изпратим номера на
+                    товарителницата, с който можете да проследите пратката.`)
+        $(lol).show();
+        $('.hide_last_order').click(function (e) {
+            $(lol).hide();
+            e.preventDefault();
+        });
+    } // end function show_last_order
+
+    //Disabled for now. Will be shown when the order implementation is ready.
+    function show_last_order_button() {
+        return;
+        if (!order.deliverer) return;
+        if ($('#last_order_button').length) return;
+
+        $('nav.nav-center').append(
+            `&nbsp;<button class="button primary outline icon sharer"
+            id="last_order_button"><img src="/img/cart-arrow-right.svg" width="24"></button>`);
+        $('#last_order_button').click(function () {
+            show_last_order(order)
+        });
+    }
+
+    /**
+     * Delete the just made by the user order.
+     */
+    function delete_cart() {
+        console.log('#delete_made_order');
+        localStorage.removeItem('cart');
+        cart = {};
+        $('#order_widget').remove();
+    }
+    /* All code below relates to email order */
+    /*************************************************/
     function show_email_order() {
         $('#email_order_layer').show();
         let hide = $('#hide_email_order');
@@ -922,15 +1163,6 @@ title="Ако желаете да добавите някакви подробн
         $(fo).submit(submit_order);
     } // end function show_email_order()
 
-    /**
-     * Delete the just made by the user order.
-     */
-    function delete_cart() {
-        console.log('#delete_made_order');
-        localStorage.removeItem('cart');
-        cart = {};
-        $('#order_widget').remove();
-    }
 
     function submit_order(ev) {
         let fo = '#email_order_form';
@@ -949,7 +1181,7 @@ title="Ако желаете да добавите някакви подробн
                 localStorage.setItem('last_order', JSON.stringify(data));
                 delete_cart();
                 $('#email_order_layer').hide();
-                display_last_order(data);
+                show_last_order(data);
             } else {
                 let response = JSON.stringify(data);
                 alert(`
@@ -963,43 +1195,14 @@ ${response}
         }, 'json');
         ev.preventDefault();
     } // end function submit_order
-
-    /**
-     * Displays the just made or last order to the user 
-     */
-    function display_last_order(order_data) {
-        //alert(order_data);
-        // display last order
-        $('body').append(last_order_template);
-        for (const k in order_data) {
-            if (k !== 'items')
-                $(`#last_order_table #${k}`).html(order_data[k]);
-        }
-        let order_sum = 0;
-        let order_weight = 0;
-        let items = order_data.items;
-        for (const it of items) {
-            let item_sum = it.price * it.quantity;
-            order_sum += item_sum;
-            order_weight += it.weight * it.quantity;
-
-            $('#last_order_items tbody').append(`
-                  <tr>
-                    <th title="${it.title}">${it.title}</th><td>${it.price}</td><td>${it.quantity} бр.</td><td>${item_sum}</td>
-                  </tr>
-            `);
-
-        }
-        $('#last_order_items').append(`<tfoot><tr><th colspan="3">Общо</th><td>${order_sum}</td></tr><tfoot>`);
-        $('#last_order_items').append(`<tfoot><tr><th colspan="3">Тегло</th><td>${order_weight}</td></tr><tfoot>`);
-        $('.hide_last_order').click(() => $('#last_order_layer').hide());
-        $('#last_order_layer').show();
-    } // end function display_last_order
-
 });
 
 @@ img/arrow-collapse-all.svg
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="24" height="24" viewBox="0 0 24 24"><path d="M19.5,3.09L20.91,4.5L16.41,9H20V11H13V4H15V7.59L19.5,3.09M20.91,19.5L19.5,20.91L15,16.41V20H13V13H20V15H16.41L20.91,19.5M4.5,3.09L9,7.59V4H11V11H4V9H7.59L3.09,4.5L4.5,3.09M3.09,19.5L7.59,15H4V13H11V20H9V16.41L4.5,20.91L3.09,19.5Z" /></svg>
+@@ img/cart-arrow-right.svg
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"  width="24" height="24" viewBox="0 0 24 24">
+   <path fill="#fff" d="M9,20A2,2 0 0,1 7,22A2,2 0 0,1 5,20A2,2 0 0,1 7,18A2,2 0 0,1 9,20M17,18A2,2 0 0,0 15,20A2,2 0 0,0 17,22A2,2 0 0,0 19,20A2,2 0 0,0 17,18M7.2,14.63C7.19,14.67 7.19,14.71 7.2,14.75A0.25,0.25 0 0,0 7.45,15H19V17H7A2,2 0 0,1 5,15C5,14.65 5.07,14.31 5.24,14L6.6,11.59L3,4H1V2H4.27L5.21,4H20A1,1 0 0,1 21,5C21,5.17 20.95,5.34 20.88,5.5L17.3,12C16.94,12.62 16.27,13 15.55,13H8.1L7.2,14.63M9,9.5H13V11.5L16,8.5L13,5.5V7.5H9V9.5Z" />
+</svg>
 @@ img/cart.svg
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="24" height="24" viewBox="0 0 24 24"><path d="M17,18C15.89,18 15,18.89 15,20A2,2 0 0,0 17,22A2,2 0 0,0 19,20C19,18.89 18.1,18 17,18M1,2V4H3L6.6,11.59L5.24,14.04C5.09,14.32 5,14.65 5,15A2,2 0 0,0 7,17H19V15H7.42A0.25,0.25 0 0,1 7.17,14.75C7.17,14.7 7.18,14.66 7.2,14.63L8.1,13H15.55C16.3,13 16.96,12.58 17.3,11.97L20.88,5.5C20.95,5.34 21,5.17 21,5A1,1 0 0,0 20,4H5.21L4.27,2M7,18C5.89,18 5,18.89 5,20A2,2 0 0,0 7,22A2,2 0 0,0 9,20C9,18.89 8.1,18 7,18Z" /></svg>
 @@ img/cart-check.svg
@@ -1038,15 +1241,14 @@ CREATE TABLE IF NOT EXISTS products (
 -- A list of orders for bying product by customers
 CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  -- recipient names - own and family name
-  recipient_names VARCHAR(100) NOT NULL,
-  email VARCHAR(100) NOT NULL,
+  -- name - own and family name
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(100),
   phone VARCHAR(20) NOT NULL,
   deliverer VARCHAR(100) NOT NULL,
-  address VARCHAR(155) NOT NULL,
-  notes VARCHAR(255) NOT NULL,
-  -- Product items. Each item has the properties of a product.
-  items JSON NOT NULL,
+  city_name VARCHAR(55) NOT NULL,
+  -- Order with product items as it comes from the deliverer. Each item has the properties of a product.
+  poruchka JSON NOT NULL,
   -- When this content was inserted
   created_at INTEGER NOT NULL DEFAULT 0,
   -- Last time the record was touched
