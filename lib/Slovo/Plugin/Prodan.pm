@@ -72,11 +72,10 @@ sub _paths {
             }
         },
 
-        '/poruchki_by_last_order/:id' => {
+        '/poruchka/:id' => {
             get => {
-                description => 'List orders for a customer starting with the given last :id. '
-                . 'Gets the email from the order and lists all orders for the same email.',
-                'x-mojo-to' => 'poruchki#list_by_last_order',
+                description => 'show an order by given :id. ',
+                'x-mojo-to' => 'poruchki#show',
                 parameters  => [
                     {
                        '$ref' => '#/parameters/id'
@@ -85,7 +84,7 @@ sub _paths {
                 responses => {
                     200 => {
                         description => 'List all orders, made by the same email like this order id',
-                        schema      => {'$ref' => '#/definitions/ListOfPoruchki'}
+                        schema      => {'$ref' => '#/definitions/Poruchka'}
 
                     },
                     default => {'$ref' => '#/definitions/ErrorResponse'}
@@ -121,7 +120,7 @@ sub _definitions {
             properties => {
                 id => {
                     description =>
-                      ' Id of the new order, returend with the response to the user-agent(browser)',
+                      ' Id of the new order, returned with the response to the user-agent(browser)',
                     type => 'integer',
                 },
                 name => {
@@ -214,7 +213,7 @@ sub _configure_econt ($self, $conf) {
     $eco->{shop_id} //= 1234567;
 
     # Код за свързване
-    $eco->{private_key} //= '7290207@KdsjfkewhewKew';
+    $eco->{private_key} //= '1234567@KdsjfkewhewKew';
 
     # валута на магазина (валута на наложения платеж)
     $eco->{shop_currency} //= 'BGN';
@@ -907,8 +906,11 @@ title="Ако желаете да добавите някакви подробн
                 localStorage.setItem('shop_data', JSON.stringify(data));
                 eco_shipment.prop('src', prepare_shipment_url(data));
                 handle_econt_order_form();
-            }).fail(function (data) {
-                alert('ГРЕШКА: \n' + data.responseText);
+            }).fail(function (jqXHR, textStatus, errorThrown) {
+                console.log(jqXHR, textStatus, errorThrown);
+                alert(
+                    'Състояние:' + textStatus +
+                    'ГРЕШКА: \n' + errorThrown);
             });
         }
     }
@@ -988,12 +990,15 @@ title="Ако желаете да добавите някакви подробн
                 weight: parseFloat($('#order_widget table>tfoot .order_weight').text())
             };
 
-            localStorage.setItem('order', JSON.stringify(order));
+            //localStorage.setItem('order', JSON.stringify(order));
 
             // възможно е да възникнат грешки при неправилно конфигурирани настройки на електронния магазин, които пречат за калкулацията
-            if (data['shipment_error'] && data['shipment_error'] !== '')
-                alert('Възникна грешка при изичисляване на стройноста на пратката');
-
+            if (data['shipment_error'] && data['shipment_error'] !== '') {
+                alert('Възникна грешка при изчисляване на стройноста на пратката.\n' +
+                    data['shipment_error'] +
+                    '\nМолим пишете ни на otzivi@studio-berov.eu,' +
+                    ' като приложите грешката към писмото и ние ще направим всичко възможно да я отстраним.');
+            }
             // формата за калкулация връща цена с НП и такава без
             // спрямо избора на клиента в "Заплащане чрез НП" показваме правилната цена
             let shippmentPrice;
@@ -1044,29 +1049,38 @@ title="Ако желаете да добавите някакви подробн
      */
     // Приключване на поръчката.
     function place_econt_order(form) {
-        $.post($(form).prop('action'), JSON.stringify({
-            Poruchka: order
-        }), function (data, status) {
-            if (status === 'success') {
-                // store the order for showing later too
-                localStorage.setItem('order', JSON.stringify(data));
-                order = data; // last order
-                delete_cart();
-                $('#econt_order_layer').hide();
-                show_last_order(data);
-            } else {
-                let response = JSON.stringify(data);
-                alert(`
+        let req = $.ajax({
+            url: $(form).prop('action'),
+            method: 'POST',
+            data: JSON.stringify({
+                Poruchka: order
+            }),
+            dataType: 'json'
+        });
+
+        req.done(function (data) {
+            // store the order for showing later too
+            localStorage.setItem('order', JSON.stringify(data));
+            order = data; // last order
+            delete_cart();
+            $('#econt_order_layer').hide();
+            show_last_order(data);
+        });
+
+        req.fail(function (jqXHR, textStatus, errorThrown) {
+            let json = JSON.parse(jqXHR.responseText);
+            alert(`
 Нещо се обърка на сървъра.
 Опитайте да изпратите поръчката си на poruchki@studio-berov.eu.
 Молим, изпратете снимка на екрана си, за да ни
 улесните в отстраняването на грешката.
-Следва отговорът от сървъра.
-${response}
+Състояние: ${jqXHR.status} ${errorThrown}
+ГРЕШКА: ${json.errors[0].path}
+${json.errors[0].message}
 `);
-            }
-        }, 'json');
+        });
     } // end place_econt_order(form)
+
     /**
      * Displays the just made or last order to the user 
      */
@@ -1114,7 +1128,8 @@ ${response}
         cart = {};
         $('#order_widget').remove();
     }
-    /* All code below relates to email order */
+
+    /* All code below relates to email order and is not used currently. */
     /*************************************************/
     function show_email_order() {
         $('#email_order_layer').show();
