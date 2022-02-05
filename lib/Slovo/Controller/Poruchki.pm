@@ -2,6 +2,7 @@ package Slovo::Controller::Poruchki;
 use Mojo::Base 'Slovo::Controller', -signatures;
 use Mojo::Util qw(dumper decode );
 
+use Mojo::JSON qw(true false decode_json encode_json);
 # POST /poruchki
 # Create and store a new order.
 # Invoked via OpenAPI by cart.js
@@ -33,7 +34,7 @@ sub store ($c) {
             declaredValue       => $o->{sum},
             currency            => $o->{shipping_price_currency},
             shipmentDescription => (
-                'книги: ' . join ';',
+                'книги ISBN: ' . join ';',
                 map {"$_->{id}: $_->{quantity}бр."} @{$o->{items}}
             ),
             receiverShareAmount => $o->{shipping_price_cod},
@@ -67,20 +68,20 @@ sub store ($c) {
     )->res;
 
     if ($eco_res->is_success) {
-        $o->{id} = $eco_res->json->{id};
+        $o->{deliverer_id} = $eco_res->json->{id}+0;
 
         # Store in our database
         # TODO: Implement control panel for orders, invoices, products
         my $id = $orders->add(
-            {   poruchka => Mojo::JSON::encode_json($o),
-                map { $_ => $o->{$_} } qw(name email phone deliverer city_name)
+            {   poruchka => encode_json($o),
+                map { $_ => $o->{$_} } qw(deliverer_id deliverer name email phone city_name)
             }
         );
         $o = $orders->find($id);
         return $c->render(data => $o->{poruchka}, status => 201);
     }
 
-    $app->log->error('Error from Ekont: Status:'
+    $app->log->error('Error from Econt: Status:'
           . $eco_res->code
           . $/
           . 'Response:'
@@ -103,10 +104,22 @@ sub store ($c) {
     );
 }
 
-# GET /poruchka/:id
-# lists orders of a customer by last order id
+# GET /poruchka/:deliverer/:id
+# show an order by given :deliverer and :id with that deliverer.
+# Invoked via OpenAPI by cart.js
 sub show ($c) {
+    $c->openapi->valid_input or return;
+    my $deliverer = $c->param('deliverer');
+    my $id = $c->param('id');
+$c->debug("$deliverer|$id");
+    my $order = $c->poruchki->find_where({deliverer => $deliverer, deliverer_id => $c->param('id')});
 
+    return $c->render(
+        openapi => {errors => [{path => $c->url_for.'', message => 'Not Found'}]},
+        status  => 404
+    ) unless $order;
+
+    return $c->render(openapi => decode_json($order->{poruchka}));
 
 }
 

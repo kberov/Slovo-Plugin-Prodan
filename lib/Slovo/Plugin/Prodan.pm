@@ -54,8 +54,7 @@ sub _paths {
                 description => 'Create a new order',
                 'x-mojo-to' => 'poruchki#store',
                 parameters  => [
-                    { 
-                        required => true,
+                    {   required => true,
                         in       => 'body',
                         name     => 'Poruchka',
                         schema   => {'$ref' => '#/definitions/Poruchka'}
@@ -72,30 +71,48 @@ sub _paths {
             }
         },
 
-        '/poruchka/:id' => {
+        '/poruchka/:deliverer/:id' => {
             get => {
-                description => 'show an order by given :id. ',
+                description =>
+                  'show an order by given :deliverer and :id with that deliverer. ',
                 'x-mojo-to' => 'poruchki#show',
                 parameters  => [
                     {
-                       '$ref' => '#/parameters/id'
+                        name        => 'id',
+                        in          => 'path',
+                        description => 'Id of the order in deliverer\'s system',
+                        required    => true,
+                        minimum     => 1,
+                        type        => 'integer'
+
                     },
+                    {
+                        name        => 'deliverer',
+                        in          => 'path',
+                        description =>
+                          'A string which denotes the deliverer. Example: "email". ',
+                        maxLength => 32,
+                        required  => true,
+                        type      => 'string',
+                        enum      => [qw(email econt)],
+                    }
                 ],
                 responses => {
                     200 => {
-                        description => 'List all orders, made by the same email like this order id',
-                        schema      => {'$ref' => '#/definitions/Poruchka'}
+                        description =>
+                          'Show order from :deliverrer with :deliverer_id',
+                        schema => {'$ref' => '#/definitions/Poruchka'}
 
                     },
                     default => {'$ref' => '#/definitions/ErrorResponse'}
                 }
             }
-        },
-        '/shop' =>{
+          },
+        '/shop' => {
             get => {
-                description =>'Provides data for the shop',
+                description => 'Provides data for the shop',
                 'x-mojo-to' => 'poruchki#shop',
-                responses =>{
+                responses   => {
 
                     default => {'$ref' => '#/definitions/ErrorResponse'}
                 }
@@ -118,21 +135,29 @@ sub _definitions {
         },
         Poruchka => {
             properties => {
-                id => {
-                    description =>
-                      ' Id of the new order, returned with the response to the user-agent(browser)',
+                deliverer_id => {
+                    description => 'Id of the order as given by Econt, returned with the response to the user-agent(browser)',
                     type => 'integer',
                 },
                 name => {
                     maxLength => 100,
-                    type      => 'string'
+                    type      => 'string',
+                },
+                email => {
+                    maxLength => 100,
+                    minLength => 0,
+                    type      => 'string',
                 },
                 phone => {
                     maxLength => 20,
-                    type      => 'string'
+                    type      => 'string',
                 },
                 deliverer => {
                     maxLength => 100,
+                    type      => 'string',
+                },
+                city_name =>{
+                    maxLength => 55,
                     type      => 'string'
                 },
                 address => {
@@ -145,13 +170,19 @@ sub _definitions {
                 },
                 items => {
                     '$ref'   => '#/definitions/OrderProducts',
-                    type     => 'array'
+                    type     => 'array',
                 },
                 way_bill_id => {
                     description =>
                       'Id at the deliverer site, returned by their system after we created the way-bill at their site.',
                     maxLength => 40,
                     type => 'string'
+                },
+                executed => {
+                    type => 'integer',
+                    minimum =>0,
+                    maximum =>9,
+                    description => 'Level of execution of the order.0:registered',
                 }
             },
         },
@@ -174,7 +205,7 @@ sub _definitions {
                     type     => 'integer'
                 },
                 weight => {
-                    type     => 'integer'
+                    type     => 'number'
                 },
                 price => {
                     type     => 'number'
@@ -183,6 +214,7 @@ sub _definitions {
         },
     );
 }
+
 # Create tables in the database on the very first run if they do not exist.
 sub _migrate ($self, $app, $conf) {
       $app->dbx->migrations->name('prodan')
@@ -375,11 +407,11 @@ __DATA__
 
 @charset "utf-8";
 
-#show_order {
+#show_cart {
   background-color: var(--bg-color);
 }
 
-#order_widget {
+#cart_widget {
   padding: 0;
   z-index: 2;
   background-color: var(--bg-color);
@@ -392,54 +424,58 @@ __DATA__
   left: 0;
 }
 
-#order_widget>h3 {
+#cart_widget>h3 {
   margin: 0;
 }
 
-#order_widget>button:nth-child(1) {
+#cart_widget>button:nth-child(1) {
   float: right;
 }
 
-#order_widget>table {
+#cart_widget>table {
   position: relative;
 }
 
-#order_widget>table>tfoot th:nth-last-child(1),
-#order_widget>table>tbody td:nth-last-child(1) {
+#cart_widget>table>tfoot th:nth-last-child(1),
+#cart_widget>table>tbody td:nth-last-child(1) {
   max-width: 13rem;
   /* white-space: nowrap; */
   text-align: center;
 }
 
-#order_widget>table>thead th:nth-last-child(2),
-#order_widget>table>tfoot th:nth-last-child(3),
-#order_widget>table>tbody td:nth-last-child(2) {
+#last_order_items tfoot th:last-child,
+#last_order_items tfoot td:last-child,
+#last_order_items tbody th:last-child,
+#last_order_items tbody td:last-child,
+#cart_widget>table>thead th:nth-last-child(2),
+#cart_widget>table>tfoot th:nth-last-child(3),
+#cart_widget>table>tbody td:nth-last-child(2) {
   max-width: 5rem;
   white-space: nowrap;
-  text-align: right;
+  text-align: end;
 }
 
 #econt_order_items>thead th:nth-last-child(3),
 #econt_order_items>tfoot th:nth-last-child(3),
 #econt_order_items>tbody td:nth-last-child(3),
-#order_widget>table>thead th:nth-last-child(3),
-#order_widget>table>tfoot th:nth-last-child(3),
-#order_widget>table>tbody td:nth-last-child(3) {
+#cart_widget>table>thead th:nth-last-child(3),
+#cart_widget>table>tfoot th:nth-last-child(3),
+#cart_widget>table>tbody td:nth-last-child(3) {
   max-width: 7rem;
   white-space: nowrap;
   text-align: end;
 }
 
 #econt_order_items>tbody th:first-child,
-#order_widget>table>tfoot th:nth-last-child(4),
-#order_widget>table>tbody td:nth-last-child(4) {
+#cart_widget>table>tfoot th:nth-last-child(4),
+#cart_widget>table>tbody td:nth-last-child(4) {
   max-width: 40rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-#order_widget>table>tfoot th:nth-last-child(4) {
+#cart_widget>table>tfoot th:nth-last-child(4) {
   text-align: right;
 }
 
@@ -455,11 +491,11 @@ button.cart {
   padding: .2rem .2em;
 }
 
-#order_widget tr:nth-child(even) td {
+#cart_widget tr:nth-child(even) td {
   background-color: var(--color-lightGrey);
 }
 
-#order_widget tr:nth-child(odd) td {
+#cart_widget tr:nth-child(odd) td {
   background-color: white;
 }
 
@@ -532,8 +568,8 @@ iframe#econt_shipment {
 
 #econt_order_items th,
 #econt_order_items td,
-#order_widget th,
-#order_widget td,
+#cart_widget th,
+#cart_widget td,
 #last_order_layer th,
 #last_order_layer td {
   padding: 0.5rem !important;
@@ -543,7 +579,7 @@ iframe#econt_shipment {
 @media (max-width: 700px) {
   /* .plus, .minus,.remove images as buttons */
 
-  #order_widget img.outline {
+  #cart_widget img.outline {
     width: 32px;
   }
 
@@ -553,10 +589,10 @@ iframe#econt_shipment {
   #econt_order_items tbody td:nth-last-child(2),
   #econt_order_items tbody th:nth-last-child(3),
   #econt_order_items tbody td:nth-last-child(3),
-  #last_order_items th:nth-last-child(1),
-  #last_order_items td:nth-last-child(1),
-  #order_widget>table>tfoot th:nth-last-child(1),
-  #order_widget>table>tbody td:nth-last-child(1) {
+  #last_order_items tfoot th:last-child,
+  #last_order_items tfoot td:last-child,
+  #cart_widget>table>tfoot th:nth-last-child(1),
+  #cart_widget>table>tbody td:nth-last-child(1) {
     max-width: 5rem;
     text-align: end;
   }
@@ -566,8 +602,8 @@ iframe#econt_shipment {
   #econt_order_items th:first-child,
   #econt_order_items td:first-child,
   #last_order_items td:nth-last-child(1),
-  #order_widget>table>tfoot th:nth-last-child(4),
-  #order_widget>table>tbody td:nth-last-child(4) {
+  #cart_widget>table>tfoot th:nth-last-child(4),
+  #cart_widget>table>tbody td:nth-last-child(4) {
     max-width: 10rem;
   }
 
@@ -593,11 +629,19 @@ jQuery(function ($) {
     // cart will go finally to order.items
     let cart = localStorage.cart ? JSON.parse(localStorage.cart) : {};
     let order = localStorage.order ? JSON.parse(localStorage.order) : {};
+    const deliverers = {
+        econt: 'Еконт',
+        email: 'Е-Поща'
+    };
+    const currency = {
+        BGN: 'лв.',
+        EUR: 'евро'
+    };
 
-    const order_widget_template = `
-<div id="order_widget" class="card text-center">
+    const cart_widget_template = `
+<div id="cart_widget" class="card text-center">
 <button class="button primary outline icon cart" title="Показване/Скриване на поръчката"
-    id="show_order"><span class="order_total"></span><img src="/img/cart.svg" width="32" height="32" /></button>
+    id="show_cart"><span class="order_total"></span><img src="/img/cart.svg" width="32" height="32" /></button>
 <h3 style="display:none">Поръчка</h3>
 <table style="display:none">
 <thead><tr><th>Изделие</th><th>Ед. цена</th><th>Бр.</th><th><!-- action --></th></tr></thead>
@@ -706,7 +750,7 @@ title="Ако желаете да добавите някакви подробн
         title="Скриване"><span class="order_total"></span><img src="/img/arrow-collapse-all.svg" width="32" /></button>
     <p>Вашата поръчка е приета. Ще бъдете уведомени своевременно от превозвача, когато вашата пратка пристигне.</p>
         <section id="last_order_table">
-            <div class="row"><div class="col">Поръчка №:</div><div class="col" id="id"></div></div>
+            <div class="row"><div class="col">Поръчка №:</div><div class="col" id="deliverer_id"></div></div>
             <div class="row"><div class="col">Получател:</div><div class="col" id="name"></div></div>
             <div class="row"><div class="col">E-поща:</div><div class="col" id="email"></div></div>
             <div class="row"><div class="col">Телефон:</div><div class="col" id="phone"></div></div>
@@ -726,7 +770,7 @@ title="Ако желаете да добавите някакви подробн
     </div>
 </div>
     `;
-    show_order();
+    show_cart();
     /* In a regular page we present a product(book, software package,
      * whatever). On the page there is one or more buttons(one per product)
      * (.add-to-cart) in which data-attributes are stored all the properties
@@ -748,8 +792,8 @@ title="Ако желаете да добавите някакви подробн
                 price: product.price
             };
         }
-        // display the cart in #order_widget
-        show_order();
+        // display the cart in #cart_widget
+        show_cart();
         //Scroll to the top to show the cart because it is positioned absolutely.
         $('html').animate({
             scrollTop: 0
@@ -760,24 +804,24 @@ title="Ако желаете да добавите някакви подробн
         console.log('#cancel_order');
         localStorage.removeItem('cart');
         cart = {};
-        $('#order_widget').remove();
+        $('#cart_widget').remove();
     }
 
-    function show_order() {
+    function show_cart() {
         show_last_order_button();
         // there is nothing to show? return.
         if (!Object.keys(cart).length) return;
 
         // Store the changed cart!!!
         localStorage.setItem('cart', JSON.stringify(cart));
-        let order_widget = $('#order_widget');
+        let cart_widget = $('#cart_widget');
         //if not yet in dom, create it
-        if (!order_widget.length) {
-            $('body').append(order_widget_template);
+        if (!cart_widget.length) {
+            $('body').append(cart_widget_template);
             //populate the table>tbody with the contents of the cart
             $(Object.keys(cart)).each(populate_order_table);
             // make the cart button to toggle the visibility of the products table
-            $('#show_order').click(toggle_order_table_visibility);
+            $('#show_cart').click(toggle_order_table_visibility);
             // append the email_order_form
             if (!$('#email_order_layer').length)
                 $('body').append(email_order_template);
@@ -812,11 +856,11 @@ title="Ако желаете да добавите някакви подробн
         $('#econt_order').click(show_econt_order);
         // Display an order form and handle data collection from the user 
         //$('#email_order').click(show_email_order);
-    } // end function show_order()
+    } // end function show_cart()
 
     function populate_order_table() {
         let this_id = this;
-        let ow_jq = '#order_widget>table>tbody';
+        let ow_jq = '#cart_widget>table>tbody';
         $(ow_jq).append(`
                   <tr id="${this_id}">
                     <td title="${cart[this_id].title}">${cart[this].title}</td>
@@ -836,12 +880,12 @@ title="Ако желаете да добавите някакви подробн
             }
             --cart[this_id].quantity;
             localStorage.removeItem('cart');
-            show_order();
+            show_cart();
         });
         $(`${ow_jq} tr#${this_id} .plus`).click(function () {
             ++cart[this_id].quantity;
             localStorage.removeItem('cart');
-            show_order();
+            show_cart();
         });
         $(`${ow_jq} tr#${this_id} .remove`).click(remove_item);
 
@@ -852,23 +896,23 @@ title="Ако желаете да добавите някакви подробн
             }
             delete cart[this_id];
             localStorage.removeItem('cart');
-            show_order();
+            show_cart();
         }
 
     } // end function populate_order_table() 
 
     function repopulate_order_table() {
-        $('#order_widget>table>tbody').empty();
+        $('#cart_widget>table>tbody').empty();
         $(Object.keys(cart)).each(populate_order_table);
     }
 
     function toggle_order_table_visibility() {
-        let order_button_icon = $('#order_widget #show_order>img');
+        let order_button_icon = $('#cart_widget #show_cart>img');
         if (order_button_icon.attr('src').match(/cart/))
             order_button_icon.attr('src', '/img/arrow-collapse-all.svg');
         else
             order_button_icon.attr('src', '/img/cart.svg');
-        $('#order_widget>h3,#order_widget>table').toggle();
+        $('#cart_widget>h3,#cart_widget>table').toggle();
     }
 
     function show_econt_order() {
@@ -930,8 +974,8 @@ title="Ако желаете да добавите някакви подробн
             customer_address: order.address,
             id_shop: shop.shop_id,
             order_currency: shop.shop_currency,
-            order_total: parseFloat($('#order_widget table>tfoot .order_total').text()),
-            order_weight: parseFloat($('#order_widget table>tfoot .order_weight').text()),
+            order_total: parseFloat($('#cart_widget table>tfoot .order_total').text()),
+            order_weight: parseFloat($('#cart_widget table>tfoot .order_weight').text()),
             customer_address: order.address,
             ignore_history: 0,
             confirm_txt: 'Доставка'
@@ -942,10 +986,6 @@ title="Ако желаете да добавите някакви подробн
 
     //2.3. JavaScript функця, която получава резултата от формата за доставка:
     function handle_econt_order_form() {
-        const currency = {
-            BGN: 'лв.',
-            EUR: 'евро'
-        };
         // Елемент от кода, където е указано дали стоката ще се заплаща с НП или не
         var codInput = document.getElementsByName('cod')[0];
         //Елемент от формата в който ще се постави уникалното ID на доставката
@@ -986,8 +1026,8 @@ title="Ако желаете да добавите някакви подробн
                 ...data,
                 items: order.items,
                 deliverer: 'econt',
-                sum: parseFloat($('#order_widget table>tfoot .order_total').text()),
-                weight: parseFloat($('#order_widget table>tfoot .order_weight').text())
+                sum: parseFloat($('#cart_widget table>tfoot .order_total').text()),
+                weight: parseFloat($('#cart_widget table>tfoot .order_weight').text())
             };
 
             //localStorage.setItem('order', JSON.stringify(order));
@@ -1057,13 +1097,14 @@ title="Ако желаете да добавите някакви подробн
             }),
             dataType: 'json'
         });
+        // Prevent further firing of econt iframe eventListener
+        $('#econt_order_layer').remove();
 
         req.done(function (data) {
             // store the order for showing later too
             localStorage.setItem('order', JSON.stringify(data));
             order = data; // last order
             delete_cart();
-            $('#econt_order_layer').hide();
             show_last_order(data);
         });
 
@@ -1088,16 +1129,19 @@ ${json.errors[0].message}
         let lol = '#last_order_layer';
         $(lol).remove();
         $('body').append(last_order_template);
-        let delivery = ['id', 'name', 'email', 'phone', 'deliverer', 'office_name', 'address'];
+        let delivery = ['deliverer_id', 'name', 'email', 'phone', 'deliverer', 'office_name', 'address'];
         console.log(order_data)
         for (const k of delivery) {
             if (order_data[k])
-                $(`#last_order_table #${k}`).text(order_data[k]);
+                k == 'deliverer' ? $(`#last_order_table #${k}`).text(deliverers[order_data[k]]) : $(`#last_order_table #${k}`).text(order_data[k]);
         }
         inline_order_items('#last_order_items', order_data.items);
-        if (order_data.email)
+        $('#last_order_items tfoot tr:last-child td:last-child')
+            .text(`${order_data.shipping_price_cod} ${currency[order_data.shipping_price_currency]}`);
+
+        /* if (order_data.email)
             $(`${lol} p:first-child`).append(`На електронната ви поща ще изпратим номера на
-                    товарителницата, с който можете да проследите пратката.`)
+                    товарителницата, с който можете да проследите пратката.`); */
         $(lol).show();
         $('.hide_last_order').click(function (e) {
             $(lol).hide();
@@ -1107,12 +1151,12 @@ ${json.errors[0].message}
 
     //Disabled for now. Will be shown when the order implementation is ready.
     function show_last_order_button() {
-        return;
+        //return;
         if (!order.deliverer) return;
         if ($('#last_order_button').length) return;
 
         $('nav.nav-center').append(
-            `&nbsp;<button class="button primary outline icon sharer"
+            `&nbsp;<button class="button primary outline icon sharer" title="Вашата последна поръчка"
             id="last_order_button"><img src="/img/cart-arrow-right.svg" width="24"></button>`);
         $('#last_order_button').click(function () {
             show_last_order(order)
@@ -1126,7 +1170,7 @@ ${json.errors[0].message}
         console.log('#delete_made_order');
         localStorage.removeItem('cart');
         cart = {};
-        $('#order_widget').remove();
+        $('#cart_widget').remove();
     }
 
     /* All code below relates to email order and is not used currently. */
@@ -1261,6 +1305,8 @@ CREATE TABLE IF NOT EXISTS orders (
   email VARCHAR(100),
   phone VARCHAR(20) NOT NULL,
   deliverer VARCHAR(100) NOT NULL,
+  -- id of the order, given by the deliverer
+  deliverer_id VARCHAR(40) NOT NULL,
   city_name VARCHAR(55) NOT NULL,
   -- Order with product items as it comes from the deliverer. Each item has the properties of a product.
   poruchka JSON NOT NULL,
@@ -1274,6 +1320,7 @@ CREATE TABLE IF NOT EXISTS orders (
   executed INT(1) DEFAULT 0
 
 );
+CREATE UNIQUE INDEX IF NOT EXISTS deliverer_id ON orders(deliverer, deliverer_id);
 
 -- A list of invoices for services and products, produced by different users
 -- of this system.
