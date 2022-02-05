@@ -3,6 +3,7 @@ use Mojo::Base 'Slovo::Controller', -signatures;
 use Mojo::Util qw(dumper decode );
 
 use Mojo::JSON qw(true false decode_json encode_json);
+
 # POST /poruchki
 # Create and store a new order.
 # Invoked via OpenAPI by cart.js
@@ -30,9 +31,10 @@ sub store ($c) {
 
             #id => $o->{id},
             #orderNumber         => $o->{id},
-            cod                 => 1,
-            declaredValue       => $o->{sum},
-            currency            => $o->{shipping_price_currency},
+            cod           => 1,
+            declaredValue => $o->{sum},
+            currency      => $o->{shipping_price_currency},
+
             # TODO: implement product types as started in table products column type.
             shipmentDescription => (
                 'книги ISBN: ' . join ';',
@@ -69,13 +71,15 @@ sub store ($c) {
     )->res;
 
     if ($eco_res->is_success) {
-        $o->{deliverer_id} = $eco_res->json->{id}+0;
+        $o->{deliverer_id} = $eco_res->json->{id} + 0;
+        $o->{created_at}   = $o->{tstamp} = time;
 
         # Store in our database
         # TODO: Implement control panel for orders, invoices, products
         my $id = $orders->add(
             {   poruchka => encode_json($o),
-                map { $_ => $o->{$_} } qw(deliverer_id deliverer name email phone city_name)
+                map { $_ => $o->{$_} }
+                  qw(deliverer_id deliverer name email phone city_name created_at tstamp)
             }
         );
         $o = $orders->find($id);
@@ -110,17 +114,32 @@ sub store ($c) {
 # Invoked via OpenAPI by cart.js
 sub show ($c) {
     $c->openapi->valid_input or return;
-    my $deliverer = $c->param('deliverer');
+    my $deliverer    = $c->param('deliverer');
+    my $deliverer_id = $c->param('deliverer_id');
+
+    # Initially generated checksum by the econt order form. Only a user having
+    # the order in his localStorage has it. If the user clears it's cache in
+    # the browser, the order and this checksum is lost. The 'id' query
+    # parameter is to prevent from brute force guessing.
     my $id = $c->param('id');
-$c->debug("$deliverer|$id");
-    my $order = $c->poruchki->find_where({deliverer => $deliverer, deliverer_id => $c->param('id')});
+
+    my $order = $c->poruchki->find_where(
+        {   deliverer    => $deliverer,
+            deliverer_id => $deliverer_id,
+            poruchka     => {-like => qq|%"id":"$id"%|}
+        }
+    );
 
     return $c->render(
-        openapi => {errors => [{path => $c->url_for.'', message => 'Not Found'}]},
+        openapi => {errors => [{path => $c->url_for . '', message => 'Not Found'}]},
         status  => 404
     ) unless $order;
 
-    return $c->render(openapi => decode_json($order->{poruchka}));
+    # TODO: check for changes on econt side each two ours or more. If there is
+    # a way_bill_id, store the updated order and show it to the user.
+
+    $order->{poruchka} = decode_json($order->{poruchka});
+    return $c->render(openapi => $order->{poruchka});
 
 }
 
