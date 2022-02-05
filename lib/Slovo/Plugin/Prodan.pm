@@ -195,10 +195,14 @@ sub _definitions {
             }
         },
         OrderProduct => {
-            description => 'An item in an order (cart): id, title, quantity, price',
+            description => 'An item in an order (cart): sku, title, quantity, price',
             properties  => {
-                id => {
+                sku => {
                     maxLength => 40,
+                    type      => 'string'
+                },
+                title => {
+                    maxLength => 155,
                     type      => 'string'
                 },
                 quantity => {
@@ -622,7 +626,7 @@ iframe#econt_shipment {
 
 @@ js/cart.js
 /* An unobtrusive shopping cart based on localStorage
- * Formatted with `js-beautify -j -r -f lib/Slovo/resources/public/js/cart.js`
+ * Formatted with `js-beautify -j -r -f domove/xn--b1arjbl.xn--90ae/public/js/cart.js`
  */
 jQuery(function ($) {
     'use strict';
@@ -780,12 +784,12 @@ title="Ако желаете да добавите някакви подробн
 
     function add_to_cart() {
         let product = $(this).data();
-        let product_id = '_' + product.id;
+        let product_id = '_' + product.sku;
         if (product_id in cart) {
             ++cart[product_id].quantity;
         } else {
             cart[product_id] = {
-                id: product.id,
+                sku: product.sku,
                 title: product.title,
                 quantity: 1,
                 weight: product.weight,
@@ -942,14 +946,12 @@ title="Ако желаете да добавите някакви подробн
         if ((now - shop_data.retrieved) < 3600 * 2) {
             if (!eco_shipment.prop('src').match(new RegExp(shop_data.shop_id))) {
                 eco_shipment.prop('src', prepare_shipment_url(shop_data));
-                handle_econt_order_form();
             }
         } else {
             $.get('/api/shop').done(function (data) {
                 data.retrieved = now;
                 localStorage.setItem('shop_data', JSON.stringify(data));
                 eco_shipment.prop('src', prepare_shipment_url(data));
-                handle_econt_order_form();
             }).fail(function (jqXHR, textStatus, errorThrown) {
                 console.log(jqXHR, textStatus, errorThrown);
                 alert(
@@ -957,6 +959,8 @@ title="Ако желаете да добавите някакви подробн
                     'ГРЕШКА: \n' + errorThrown);
             });
         }
+        handle_econt_order_form();
+
     }
 
     // https://www.econt.com/developers/44-implementirane-na-dostavi-s-ekont-v-elektronniya-vi-magazin.html
@@ -978,7 +982,7 @@ title="Ако желаете да добавите някакви подробн
             order_weight: parseFloat($('#cart_widget table>tfoot .order_weight').text()),
             customer_address: order.address,
             ignore_history: 0,
-            confirm_txt: 'Доставка'
+            confirm_txt: 'Потвърждавам'
         };
         let params = $.param(shipment, true);
         return `${shop.shippment_calc_url}?${params}`;
@@ -986,77 +990,82 @@ title="Ако желаете да добавите някакви подробн
 
     //2.3. JavaScript функця, която получава резултата от формата за доставка:
     function handle_econt_order_form() {
+        window.addEventListener('message', handle_econt_order_confirm, false);
+    }
+    /* Added as EventListener to econt iframe in which is placed the "Deliver
+       with Econt" confirmation form */
+    function handle_econt_order_confirm(message) {
         // Елемент от кода, където е указано дали стоката ще се заплаща с НП или не
-        var codInput = document.getElementsByName('cod')[0];
+        let codInput = document.getElementsByName('cod')[0];
         //Елемент от формата в който ще се постави уникалното ID на доставката
-        var customerInfoIdInput = document.getElementsByName('customerInfo[id]')[0];
+        let customerInfoIdInput = document.getElementsByName('customerInfo[id]')[0];
         //Формата в която се съдържат данните по поръчката в магазина и същата трябва да се подаде
-        var econt_order_form = document.getElementById('econt_order_form');
+        let econt_order_form = document.getElementById('econt_order_form');
         // добавяне на функция, която 'слуша' данни връщани от формите за доставка
-        window.addEventListener('message', function (message) {
-            // Данни връщани от формата за доставка:
-            // id: уникално ID на адреса. Това поле трябва да бъде поставено в скритото customerInfo[id]
-            // id_country: ID на държавата
-            // zip: зип код на населеното място
-            // post_code: пощенски код на населеното място
-            // city_name: населено място
-            // office_code: код на офиса на Еконт ако бъде избран такъв
-            // address: адрес
-            // name: име / фирма
-            // face: лице
-            // phone: телефон
-            // email: имейл
-            // shipping_price: цена на пратката без НП
-            // shipping_price_cod: цена на пратката с НП
-            // shipping_price_currency: валута на калкулираната цена
-            // shipment_error: поясняващ текст ако е възникнала грешка
+        // Данни връщани от формата за доставка:
+        // id: уникално ID на адреса. Това поле трябва да бъде поставено в скритото customerInfo[id]
+        // id_country: ID на държавата
+        // zip: зип код на населеното място
+        // post_code: пощенски код на населеното място
+        // city_name: населено място
+        // office_code: код на офиса на Еконт ако бъде избран такъв
+        // address: адрес
+        // name: име / фирма
+        // face: лице
+        // phone: телефон
+        // email: имейл
+        // shipping_price: цена на пратката без НП
+        // shipping_price_cod: цена на пратката с НП
+        // shipping_price_currency: валута на калкулираната цена
+        // shipment_error: поясняващ текст ако е възникнала грешка
 
-            let data = message['data'];
-            if (data.office_code) {
-                delete data.num;
-                data.address = data.office_name;
-                delete data.street;
-                delete data.other;
-                delete data.quarter;
-                // todo: get the office address somehow (via some API call) to show it to the user
-                // data.address = $(`option[value=${data.office_code}]`, document.getElementById('econt_shipment').contentWindow.document).text();
-            }
+        let data = message['data'];
+        if (data.office_code) {
+            delete data.num;
+            data.address = data.office_name;
+            delete data.street;
+            delete data.other;
+            delete data.quarter;
+            // todo: get the office address somehow (via some API call) to show it to the user
+            // data.address = $(`option[value=${data.office_code}]`, document.getElementById('econt_shipment').contentWindow.document).text();
+        }
 
-            order = {
-                ...data,
-                items: order.items,
-                deliverer: 'econt',
-                sum: parseFloat($('#cart_widget table>tfoot .order_total').text()),
-                weight: parseFloat($('#cart_widget table>tfoot .order_weight').text())
-            };
+        order = {
+            ...data,
+            items: order.items,
+            deliverer: 'econt',
+            sum: parseFloat($('#cart_widget table>tfoot .order_total').text()),
+            weight: parseFloat($('#cart_widget table>tfoot .order_weight').text())
+        };
 
-            //localStorage.setItem('order', JSON.stringify(order));
+        //localStorage.setItem('order', JSON.stringify(order));
 
-            // възможно е да възникнат грешки при неправилно конфигурирани настройки на електронния магазин, които пречат за калкулацията
-            if (data['shipment_error'] && data['shipment_error'] !== '') {
-                alert('Възникна грешка при изчисляване на стройноста на пратката.\n' +
-                    data['shipment_error'] +
-                    '\nМолим пишете ни на otzivi@studio-berov.eu,' +
-                    ' като приложите грешката към писмото и ние ще направим всичко възможно да я отстраним.');
-            }
-            // формата за калкулация връща цена с НП и такава без
-            // спрямо избора на клиента в "Заплащане чрез НП" показваме правилната цена
-            let shippmentPrice;
+        // възможно е да възникнат грешки при неправилно конфигурирани настройки на електронния магазин, които пречат за калкулацията
+        if (data['shipment_error'] && data['shipment_error'] !== '') {
+            alert('Възникна грешка при изчисляване на стройноста на пратката.\n' +
+                data['shipment_error'] +
+                '\nМолим пишете ни на otzivi@studio-berov.eu,' +
+                ' като приложите грешката към писмото и ние ще направим всичко възможно да я отстраним.');
+        }
+        // формата за изчисляване връща цена с НП и такава без
+        // спрямо избора на клиента в "Заплащане чрез НП" показваме правилната цена
+        let shippmentPrice;
 
-            if (codInput) shippmentPrice = parseFloat(data['shipping_price_cod']);
-            else shippmentPrice = parseFloat(data['shipping_price']);
-            $('#econt_order_items tfoot>tr:last-child>td').replaceWith(`${shippmentPrice.toFixed(2)} ${currency[data['shipping_price_currency']]}`);
-            let confirmMessage =
-                `Куриерската ви услуга е на стройност ${shippmentPrice} ${currency[data['shipping_price_currency']]}
+        if (codInput) shippmentPrice = parseFloat(data['shipping_price_cod']);
+        else shippmentPrice = parseFloat(data['shipping_price']);
+        $('#econt_order_items tfoot>tr:last-child>td').replaceWith(`${shippmentPrice.toFixed(2)} ${currency[data['shipping_price_currency']]}`);
+        let confirmMessage =
+            `Куриерската ви услуга е на стройност ${shippmentPrice} ${currency[data['shipping_price_currency']]}
 Наложеният платеж е на стойност ${order.sum} ${currency[data['shipping_price_currency']]}
 Общо: ${shippmentPrice + order.sum} ${currency[data['shipping_price_currency']]}
 Потвърждавате ли покупката?`;
-            if (confirm(confirmMessage)) {
-                //customerInfoIdInput.value = data['id'];
-                // confirmForm.submit();
-                place_econt_order(econt_order_form)
-            }
-        }, false);
+        if (confirm(confirmMessage)) {
+            //customerInfoIdInput.value = data['id'];
+            // confirmForm.submit();
+            // Prevent this event to fire twice or more times after first confirmation
+            window.removeEventListener("message", handle_econt_order_confirm, false);
+            place_econt_order(econt_order_form)
+        }
     }
 
     /* Inline order items into econt_order_template or last_order_template */
@@ -1287,11 +1296,15 @@ ${response}
 -- A list of products and services being sold
 CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sku VARCHAR(40) UNIQUE NOT NULL,
   -- Lowercased and trimmed of \W characters unique identifier
   alias VARCHAR(100) UNIQUE NOT NULL,
+  title VARCHAR(100) UNIQUE NOT NULL,
   description VARCHAR(2000) NOT NULL DEFAULT '',
+  -- The product type: книга, картина, ръкоделие... etc/
+  type VARCHAR(16) NOT NULL,
   -- the properties which are put in the data-* attributes
-  -- of an "Add to cart" button such as data-isbn, data-price,
+  -- of an "Add to cart" button such as data-sku, data-price,
   -- data-vat, data-vat_included, data-title, data-description, etc.
   properties JSON NOT NULL DEFAULT '{}'
 

@@ -33,9 +33,10 @@ sub store ($c) {
             cod                 => 1,
             declaredValue       => $o->{sum},
             currency            => $o->{shipping_price_currency},
+            # TODO: implement product types as started in table products column type.
             shipmentDescription => (
                 'книги ISBN: ' . join ';',
-                map {"$_->{id}: $_->{quantity}бр."} @{$o->{items}}
+                map {"$_->{sku}: $_->{quantity}бр."} @{$o->{items}}
             ),
             receiverShareAmount => $o->{shipping_price_cod},
             customerInfo        => {
@@ -56,7 +57,7 @@ sub store ($c) {
             items => [
                 map {
                     {   name        => $_->{title},
-                        SKU         => $_->{id},
+                        SKU         => $_->{sku},
                         count       => $_->{quantity},
                         hideCount   => 0,
                         totalPrice  => ($_->{quantity} * $_->{price}),
