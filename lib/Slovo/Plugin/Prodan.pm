@@ -8,265 +8,226 @@ our $VERSION   = '0.01';
 has app => sub { Mojo::HelloWorld->new }, weak => 1;
 
 sub register ($self, $app, $conf) {
-    $self->app($app);
+  $self->app($app);
 
-    # Prepend class
-    unshift @{$app->renderer->classes}, __PACKAGE__;
+  # Prepend class
+  unshift @{$app->renderer->classes}, __PACKAGE__;
 
-    unshift @{$app->static->classes}, __PACKAGE__;
-    $app->stylesheets('/css/cart.css');
-    $app->javascripts('/js/cart.js');
-    local $Data::Dumper::Maxdepth = 5;
+  unshift @{$app->static->classes}, __PACKAGE__;
+  $app->stylesheets('/css/cart.css');
+  $app->javascripts('/js/cart.js');
+  local $Data::Dumper::Maxdepth = 5;
 
-    # $app->log->debug(join $/, sort keys %INC);
-    # $app->debug('Prodan $config', $conf);
-    # Set this flag, when we have changes to the tables to be applied.
-    $self->_migrate($app, $conf) if ($conf->{migrate});
+  # $app->log->debug(join $/, sort keys %INC);
+  # $app->debug('Prodan $config', $conf);
+  # Set this flag, when we have changes to the tables to be applied.
+  $self->_migrate($app, $conf) if $conf->{migrate};
 
-    my $spec = $app->openapi_spec;
-    %{$spec->{definitions}} = (%{$spec->{definitions}}, $self->_definitions);
-    %{$spec->{paths}}       = (%{$spec->{paths}},       $self->_paths);
-    $app->plugin(OpenAPI => {spec => $spec});
+  my $spec = $app->openapi_spec;
+  %{$spec->{definitions}} = (%{$spec->{definitions}}, $self->_definitions);
+  %{$spec->{paths}}       = (%{$spec->{paths}},       $self->_paths);
+  $app->plugin(OpenAPI => {spec => $spec});
 
-    # $app->debug($spec);
-    # Generate helpers for instantiating Slovo::Model classes just like
-    # Slovo::PLugin::MojoDBx
-    for my $t ('poruchki',) {
-        my $T     = Mojo::Util::camelize($t);
-        my $class = "Slovo::Model::$T";
-        $app->load_class($class);
-        $app->helper(
-            $t => sub ($c) {
-                my $m = $class->new(dbx => $c->dbx, c => $c);
-                Scalar::Util::weaken $m->{c};
-                return $m;
-            }
-        );
-    }
+  # $app->debug($spec);
+  # Generate helpers for instantiating Slovo::Model classes just like
+  # Slovo::PLugin::MojoDBx
+  for my $t ('poruchki', 'products') {
+    my $T     = Mojo::Util::camelize($t);
+    my $class = "Slovo::Model::$T";
+    $app->load_class($class);
+    $app->helper(
+      $t => sub ($c) {
+        my $m = $class->new(dbx => $c->dbx, c => $c);
+        Scalar::Util::weaken $m->{c};
+        return $m;
+      });
+  }
 
-    # configure deliverers
-    $self->_configure_deliverers($conf);
-    return $self;
+  # configure deliverers
+  $self->_configure_deliverers($conf);
+  return $self;
 }
 
 sub _paths {
-    return (
-        '/poruchki' => {
-            post => {
-                description => 'Create a new order',
-                'x-mojo-to' => 'poruchki#store',
-                parameters  => [
-                    {   required => true,
-                        in       => 'body',
-                        name     => 'Poruchka',
-                        schema   => {'$ref' => '#/definitions/Poruchka'}
-                    },
-                ],
-                responses => {
-                    201 => {
-                        description => 'Order created successfully!',
-                        schema      => {'$ref' => '#/definitions/Poruchka'}
+  return (
+    '/poruchki' => {
+      post => {
+        description => 'Create a new order',
+        'x-mojo-to' => 'poruchki#store',
+        parameters  => [{
+            required => true,
+            in       => 'body',
+            name     => 'Poruchka',
+            schema   => {'$ref' => '#/definitions/Poruchka'}
+          },
+        ],
+        responses => {
+          201 => {
+            description => 'Order created successfully!',
+            schema      => {'$ref' => '#/definitions/Poruchka'}
 
-                    },
-                    default => {'$ref' => '#/definitions/ErrorResponse'}
-                }
-            }
-        },
+          },
+          default => {'$ref' => '#/definitions/ErrorResponse'}}}
+    },
 
-        '/poruchka/:deliverer/:deliverer_id' => {
-            put => {
-                description =>
-                  'show an order by given :deliverer and :id with that deliverer. ',
-                'x-mojo-to' => 'poruchki#show',
-                parameters  => [
-                    {   name        => 'deliverer_id',
-                        in          => 'path',
-                        description => 'Id of the order in deliverer\'s system',
-                        type        => 'integer',
-                        required    => true,
+    '/poruchka/:deliverer/:deliverer_id' => {
+      put => {
+        description => 'show an order by given :deliverer and :id with that deliverer. ',
+        'x-mojo-to' => 'poruchki#show',
+        parameters  => [{
+            name        => 'deliverer_id',
+            in          => 'path',
+            description => 'Id of the order in deliverer\'s system',
+            type        => 'integer',
+            required    => true,
 
-                    },
-                    {   name        => 'deliverer',
-                        in          => 'path',
-                        description =>
-                          'A string which denotes the deliverer. Example: "email". ',
-                        type     => 'string',
-                        enum     => [qw(email econt)],
-                        required => true,
-                    },
-                    {   name        => 'id',
-                        in          => 'formData',
-                        description =>
-                          '"id" property, found in the order structure. Generated by the Econt delivery confirmation form',
-                        type     => 'string',
-                        required => true,
+          },
+          {
+            name        => 'deliverer',
+            in          => 'path',
+            description => 'A string which denotes the deliverer. Example: "email". ',
+            type        => 'string',
+            enum        => [qw(email econt)],
+            required    => true,
+          },
+          {
+            name        => 'id',
+            in          => 'formData',
+            description =>
+              '"id" property, found in the order structure. Generated by the Econt delivery confirmation form',
+            type     => 'string',
+            required => true,
 
-                    },
-                ],
-                responses => {
-                    200 => {
-                        description =>
-                          'Show eventually updated order from :deliverer with :deliverer_id',
-                        schema => {'$ref' => '#/definitions/Poruchka'}
+          },
+        ],
+        responses => {
+          200 => {
+            description =>
+              'Show eventually updated order from :deliverer with :deliverer_id',
+            schema => {'$ref' => '#/definitions/Poruchka'}
 
-                    },
-                    default => {'$ref' => '#/definitions/ErrorResponse'}
-                }
-            }
-        },
-        '/shop' => {
-            get => {
-                description => 'Provides data for the shop',
-                'x-mojo-to' => 'poruchki#shop',
-                responses   => {
+          },
+          default => {'$ref' => '#/definitions/ErrorResponse'}}}
+    },
+    '/shop' => {
+      get => {
+        description => 'Provides data for the shop',
+        'x-mojo-to' => 'poruchki#shop',
+        responses   => {
 
-                    default => {'$ref' => '#/definitions/ErrorResponse'}
-                }
+          default => {'$ref' => '#/definitions/ErrorResponse'}}
 
-            }
-        },
-    );
+      }
+    },
+  );
 }
 
 # Returns description as a perl structure of objects defined for the json API
 # to be added to the /definitions of our OpenAPI
 sub _definitions {
-    return (
-        ListOfPoruchki => {
-            description => 'An array of Poruchka items.',
-            items       => {
-                '$ref' => '#/definitions/Poruchka',
-                type   => 'array',
-            }
+  return (
+    ListOfPoruchki => {
+      description => 'An array of Poruchka items.',
+      items       => {'$ref' => '#/definitions/Poruchka', type => 'array',}
+    },
+    Poruchka => {
+      properties => {
+        deliverer_id => {
+          description =>
+            'Id of the order as given by Econt, returned with the response to the user-agent(browser)',
+          type => 'integer',
         },
-        Poruchka => {
-            properties => {
-                deliverer_id => {
-                    description =>
-                      'Id of the order as given by Econt, returned with the response to the user-agent(browser)',
-                    type => 'integer',
-                },
-                name => {
-                    maxLength => 100,
-                    type      => 'string',
-                },
-                email => {
-                    maxLength => 100,
-                    minLength => 0,
-                    type      => 'string',
-                },
-                phone => {
-                    maxLength => 20,
-                    type      => 'string',
-                },
-                deliverer => {
-                    maxLength => 100,
-                    type      => 'string',
-                },
-                city_name => {
-                    maxLength => 55,
-                    type      => 'string'
-                },
-                address => {
-                    maxLength => 155,
-                    type      => 'string'
-                },
-                notes => {
-                    maxLength => 255,
-                    type      => 'string'
-                },
-                items => {
-                    '$ref' => '#/definitions/OrderProducts',
-                    type   => 'array',
-                },
-                way_bill_id => {
-                    description =>
-                      'Id at the deliverer site, returned by their system after we created the way-bill at their site.',
-                    maxLength => 40,
-                    type      => 'string'
-                },
-                executed => {
-                    type        => 'integer',
-                    minimum     => 0,
-                    maximum     => 9,
-                    description => 'Level of execution of the order.0:registered',
-                }
-            },
+        name        => {maxLength => 100, type      => 'string',},
+        email       => {maxLength => 100, minLength => 0, type => 'string',},
+        phone       => {maxLength => 20,                            type => 'string',},
+        deliverer   => {maxLength => 100,                           type => 'string',},
+        city_name   => {maxLength => 55,                            type => 'string'},
+        address     => {maxLength => 155,                           type => 'string'},
+        notes       => {maxLength => 255,                           type => 'string'},
+        items       => {'$ref'    => '#/definitions/OrderProducts', type => 'array',},
+        way_bill_id => {
+          description =>
+            'Id at the deliverer site, returned by their system after we created the way-bill at their site.',
+          maxLength => 40,
+          type      => 'string'
         },
-        OrderProducts => {
-            description => 'An array of OrderProduct items in an order.',
-            items       => {
-                '$ref' => '#/definitions/OrderProduct',
-                type   => 'array',
+        executed => {
+          type        => 'integer',
+          minimum     => 0,
+          maximum     => 9,
+          description => 'Level of execution of the order.0:registered',
+        }
+      },
+    },
+    OrderProducts => {
+      description => 'An array of OrderProduct items in an order.',
+      items       => {
+        '$ref' => '#/definitions/OrderProduct',
+        type   => 'array',
 
-            }
-        },
-        OrderProduct => {
-            description => 'An item in an order (cart): sku, title, quantity, price',
-            properties  => {
-                sku => {
-                    maxLength => 40,
-                    type      => 'string'
-                },
-                title => {
-                    maxLength => 155,
-                    type      => 'string'
-                },
-                quantity => {type => 'integer'},
-                weight   => {type => 'number'},
-                price    => {type => 'number'},
-            }
-        },
-    );
+      }
+    },
+    OrderProduct => {
+      description => 'An item in an order (cart): sku, title, quantity, price',
+      properties  => {
+        sku      => {maxLength => 40,  type => 'string'},
+        title    => {maxLength => 155, type => 'string'},
+        quantity => {type      => 'integer'},
+        weight   => {type      => 'number'},
+        price    => {type      => 'number'},
+      }
+    },
+  );
 }
 
 # Create tables in the database on the very first run if they do not exist.
 sub _migrate ($self, $app, $conf) {
-    $app->dbx->migrations->name('prodan')
-      ->from_data(__PACKAGE__, 'resources/data/prodan_migrations.sql')->migrate();
-    return $self;
+  $app->dbx->migrations->name('prodan')
+    ->from_data(__PACKAGE__, 'resources/data/prodan_migrations.sql')->migrate();
+  return $self;
 }
 
 # Deliverers are companies which deliver goods to users of our online shop.
 # Such delivereres in Bulgaria are Econt, Speedy, Bulgarian Posts and others.
 # Currently we integrate only Econt
 my sub DELIVERERS {
-    return qw(econt);
+  return qw(econt);
 }
 
 sub _configure_deliverers ($self, $conf) {
-    for my $d (DELIVERERS) {
-        my $d_sub = '_configure_' . $d;
-        $self->$d_sub($conf);
-    }
+  for my $d (DELIVERERS) {
+    my $d_sub = '_configure_' . $d;
+    $self->$d_sub($conf);
+  }
 }
 
 # The keys in the $conf hash reference are named after the examples given at
 # http://delivery.econt.com/services/
 sub _configure_econt ($self, $conf) {
-    my $eco = $conf->{econt};
+  my $eco = $conf->{econt};
 
-    # ID на магазина в "Достави с Еконт"
-    $eco->{shop_id} //= 1234567;
+  # ID на магазина в "Достави с Еконт"
+  $eco->{shop_id} //= 'demo';
 
-    # Код за свързване
-    $eco->{private_key} //= '1234567@KdsjfkewhewKew';
+  # Код за свързване
+  $eco->{private_key} //= 'demo';
 
-    # валута на магазина (валута на наложения платеж)
-    $eco->{shop_currency} //= 'BGN';
+  # валута на магазина (валута на наложения платеж)
+  $eco->{shop_currency} //= 'BGN';
 
-    # URL визуализиращ форма за доставка
-    $eco->{shippment_calc_url} //= 'https://delivery-demo.econt.com/customer_info.php';
+  # URL визуализиращ форма за доставка
+  $eco->{shippment_calc_url} //= 'https://delivery-demo.econt.com/customer_info.php';
 
-    # Ендпойнта на услугата за създаване или редактиране на поръчка
-    $eco->{crupdate_order_endpoint} //=
-      'https://delivery-demo.econt.com/services/OrdersService.updateOrder.json';
+  # Ендпойнта на услугата за създаване или редактиране на поръчка
+  $eco->{crupdate_order_endpoint}
+    //= 'https://delivery-demo.econt.com/services/OrdersService.updateOrder.json';
 
-    # Ендпойнта на услугата за създаване или редактиране на товарителница
-    $eco->{create_awb_endpoint} //=
-      'https://delivery-demo.econt.com/services/OrdersService.createAWB.json';
-    $self->app->debug($conf);
-    $self->app->config->{shop} = $eco;
+  # Ендпойнта на услугата за създаване или редактиране на товарителница
+  $eco->{create_awb_endpoint}
+    //= 'https://delivery-demo.econt.com/services/OrdersService.createAWB.json';
+
+  # $self->app->debug($conf);
+  $self->app->config->{shop} = $eco;
 }
 
 1;
