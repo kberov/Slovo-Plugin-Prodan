@@ -1,14 +1,10 @@
 package Slovo::Command::prodan::products;
-
-BEGIN {
-  binmode STDOUT => ':utf8';
-  binmode STDERR => ':utf8';
-}
 use Mojo::Base 'Slovo::Command', -signatures;
 use Mojo::File qw(path);
 use Mojo::Loader qw(data_section file_is_binary);
 use Mojo::Util qw(encode decode getopt dumper);
-use YAML::XS qw(Dump Load DumpFile LoadFile);
+use YAML::XS qw(Dump DumpFile LoadFile);
+use Mojo::JSON qw(to_json);
 has description => 'Manage products on the command line';
 
 has usage   => sub { shift->extract_usage };
@@ -48,7 +44,10 @@ sub run ($self, @args) {
     $action eq 'delete'
       && STDERR->say('Please provide a WHERE clause for DELETE!')
       && return;
+    $action = "_$action";
+    $self->$action($where, $limit, $ofset);
   }
+  return;
 }
 
 sub _create ($self, $file) {
@@ -58,14 +57,16 @@ sub _create ($self, $file) {
   # INSERT
   for (@$products) {
     do {
-      say "Inserting $_->{alias}, $_->{sku}";
+      say encode utf8 => "Inserting $_->{alias}, $_->{sku}";
       $db->insert(
         'products' => {
-          alias      => $_->{alias},
-          sku        => $_->{sku},
-          title      => $_->{title},
-          p_type     => $_->{p_type},
-          properties => Dump($_->{properties})});
+          alias  => $_->{alias},
+          sku    => $_->{sku},
+          title  => $_->{title},
+          p_type => $_->{p_type},
+
+          # The data is NOT encoded to UTF8 by to_json
+          properties => to_json($_->{properties})});
     } unless $db->select('products', ['id'], {alias => $_->{alias}, sku => $_->{sku},})
       ->hash;
   }
@@ -78,19 +79,20 @@ sub _update ($self, $file) {
 
   # UPDATE all the products found in the file
   for (@$products) {
-    say "Updating $_->{alias}, $_->{sku}";
-    $_->{properties} = Dump($_->{properties});
-    $db->update('products', $_, {alias => $_->{alias}, sku => $_->{sku}});
+    say encode utf8 => "Updating $_->{alias}, $_->{sku}";
+    $_->{properties} = to_json($_->{properties});
+    $db->update('products', $_, {sku => $_->{sku}});
   }
   return;
 }
 
 sub _delete ($self, $where, $limit, $offset) {
-  die "Not implemented";
+  Carp::croak "Action delete - Not implemented";
 }
 
 sub _list ($self, $where, $limit, $offset) {
-  die "Not implemented";
+  STDOUT->say('Action list - Not implemented' . $/, $self->usage);
+  return;
 }
 1;
 
@@ -113,6 +115,19 @@ Slovo::Command::prodan::products is a command to easily create, list, update or
 delete a bunch of products on the command line. For now only adding products
 from (and dumping to) YAML files is supported. In the future CSV and XLS files
 may be supported too.
+
+The idea is that YAML is very human friendly and a user can edit such a file
+and then feed it to this command to create or update the items in this file.
+Example files with product items can be found in the test folder of this
+distribution.
+
+This command is still alfa quality and its functionality may change often.
+
+=head1 SEE ALSO
+
+L<Slovo::Command::prodan>,
+L<Slovo::Plugin::Prodan>,
+L<Slovo>
 
 
 =cut

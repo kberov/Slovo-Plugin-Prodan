@@ -20,15 +20,20 @@ Slovo::Command::prodan - A sales command
 
 =head1 SYNOPSIS
 
-    slovo prodan products create --from ./products.yaml
-    slovo prodan products update --from ./products.yaml
-    # same as above
-    slovo prodan products replace --from ./products.yaml
+    List available subcommands
+    slovo prodan
 
 =head1 DESCRIPTION
 
-Slovo::Command::prodan is just a namespace for sales related commands.
+Slovo::Command::prodan is just a namespace for sales management related
+commands for a site based on L<Slovo>.
+These commands are still alfa quality and their functionalities may change often.
 
+=head1 SEE ALSO
+
+L<Slovo::Command::prodan::products>,
+L<Slovo::Plugin::Prodan>,
+L<Slovo>
 
 =cut
 

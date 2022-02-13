@@ -2,7 +2,7 @@ package Slovo::Controller::Poruchki;
 use Mojo::Base 'Slovo::Controller', -signatures;
 use Mojo::Util qw(dumper decode );
 
-use Mojo::JSON qw(true false decode_json encode_json);
+use Mojo::JSON qw(true false from_json to_json);
 
 # POST /poruchki
 # Create and store a new order.
@@ -41,13 +41,15 @@ sub _create_order ($c, $o) {
     # Store in our database
     # TODO: Implement control panel for orders, invoices, products
     my $id = $orders->add({
-      poruchka => encode_json($o),
+      poruchka => to_json($o),
       map { $_ => $o->{$_} }
         qw(deliverer_id deliverer name email phone city_name created_at tstamp)
     });
     return $id;
   }
 
+  # Something is wrong if we get to here. Log the error and inform the user
+  # that something is wrong with the communication between us and Econt.
   $app->log->error('Error from Econt: Status:'
       . $eco_res->code
       . $/
@@ -72,7 +74,6 @@ sub _create_order ($c, $o) {
   return;
 }
 
-
 sub _create_way_bill ($c, $o, $id) {
 
   state $shop = $c->config->{shop};
@@ -96,8 +97,8 @@ sub _create_way_bill ($c, $o, $id) {
     $orders->save(
       $id,
       {
-        way_bill => encode_json($way_bill),
-        poruchka => encode_json($o),
+        way_bill => to_json($way_bill),
+        poruchka => to_json($o),
         map { $_ => $o->{$_} } qw(tstamp way_bill_id)
       },
 
@@ -207,9 +208,8 @@ sub show ($c) {
   # TODO: check for changes on econt side each two ours or more. If there is
   # a way_bill_id, store the updated order and show it to the user.
 
-  $order->{poruchka} = decode_json($order->{poruchka});
+  $order->{poruchka} = from_json($order->{poruchka});
   return $c->render(openapi => $order->{poruchka});
-
 }
 
 # GET /api/shop

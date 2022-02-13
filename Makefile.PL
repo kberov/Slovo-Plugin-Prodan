@@ -7,9 +7,9 @@ use utf8;
 
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
-my $module_file = 'lib/' .                       (__PACKAGE__ =~ s|:+|/|gr) . '.pm';
-my $git_url     = 'https://github.com/kberov/' . (__PACKAGE__ =~ s/:+/-/gr);
-my $PREREQ_PM   = {'Slovo' => '2022.02.02', 'YAML::XS' => '0',};
+my $module_file = 'lib/' .                       (__PACKAGE__ =~ s|::|/|gr) . '.pm';
+my $git_url     = 'https://github.com/kberov/' . (__PACKAGE__ =~ s|::|-|gr);
+my $PREREQ_PM   = {'Slovo' => '2022.02.12', 'YAML::XS' => '0',};
 
 WriteMakefile(
   NAME               => __PACKAGE__,

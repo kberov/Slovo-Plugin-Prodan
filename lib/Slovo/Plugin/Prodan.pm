@@ -5,18 +5,17 @@ use Mojo::JSON qw(true false);
 
 our $AUTHORITY = 'cpan:BEROV';
 our $VERSION   = '0.01';
-has app => sub { Mojo::HelloWorld->new }, weak => 1;
+
+has app => sub { Slovo->new }, weak => 1;
 
 sub register ($self, $app, $conf) {
   $self->app($app);
 
   # Prepend class
   unshift @{$app->renderer->classes}, __PACKAGE__;
-
-  unshift @{$app->static->classes}, __PACKAGE__;
+  unshift @{$app->static->classes},   __PACKAGE__;
   $app->stylesheets('/css/cart.css');
   $app->javascripts('/js/cart.js');
-  local $Data::Dumper::Maxdepth = 5;
 
   # $app->log->debug(join $/, sort keys %INC);
   # $app->debug('Prodan $config', $conf);
@@ -182,6 +181,7 @@ sub _definitions {
 
 # Create tables in the database on the very first run if they do not exist.
 sub _migrate ($self, $app, $conf) {
+  $app->dbx->migrations->migrate;
   $app->dbx->migrations->name('prodan')
     ->from_data(__PACKAGE__, 'resources/data/prodan_migrations.sql')->migrate();
   return $self;
@@ -199,6 +199,7 @@ sub _configure_deliverers ($self, $conf) {
     my $d_sub = '_configure_' . $d;
     $self->$d_sub($conf);
   }
+  return;
 }
 
 # The keys in the $conf hash reference are named after the examples given at
@@ -228,32 +229,49 @@ sub _configure_econt ($self, $conf) {
 
   # $self->app->debug($conf);
   $self->app->config->{shop} = $eco;
+  return;
 }
 
 1;
 
 
-#POD
-
 =encoding utf8
 
 =head1 NAME
 
-Slovo::Plugin::Prodan – Make and manage sales in your Mojo-based site
+Slovo::Plugin::Prodan - Make and manage sales in your Slovo-based site
+
+=head1 SYNOPSIS
+
+  # In slovo.conf
+  load_plugins => [
+    #...
+    'Themes::Malka',
+    {
+      Prodan => {
+        migrate => 1,
+        econt   => {
+          shop_id                 => $ENV{SLOVO_PRODAN_SHOP_ID},
+          private_key             => $ENV{SLOVO_PRODAN_PRIVATE_KEY},
+          shippment_calc_url      => 'https://delivery.econt.com/customer_info.php',
+          crupdate_order_endpoint =>
+            'https://delivery.econt.com/services/OrdersService.updateOrder.json',
+          create_awb_endpoint =>
+            'https://delivery.econt.com/services/OrdersService.createAWB.json'
+        }}
+    },
+  ],
 
 =head1 DESCRIPTION
 
 The word про̀дан (прода̀жба) in Bulgarian means sale. Roots are found in Old
 Common Slavic (Old Bulgarian) I<<проданьѥ>>. Here is an exerpt from Codex
-Suprasliensis(331.27): I<<сꙑнъ божии. вол҄еѭ на сьпасьнѫѭ страсть съ вами
-придетъ. и на B<<продании>> станетъ. искѹпѹѭштааго животворьноѭ кръвьѭ. своеѭ
-миръ.>>
+Suprasliensis(331.27) where this word was witnessed: I<<сꙑнъ божии. вол҄еѭ
+на сьпасьнѫѭ страсть съ вами придетъ. и на B<<продании>> станетъ.
+искѹпѹѭштааго животворьноѭ кръвьѭ. своеѭ миръ.>>
 
-L<<Slovo::Plugin::Prodan>> is a L<<Mojolicious::Plugin>>. I just used the
-namespace of the application in which I use it. It should not depend directly on
-it. It may depend on features found in L<<Slovo>>. If so, I will mention it
-explicitly and provide explanations and examples to implement the needed
-feature.
+L<<Slovo::Plugin::Prodan>> is a L<<Mojolicious::Plugin>> that extends a
+Slovo-based site and turns it into an online shop. 
 
 =head1 FEATURES
 
@@ -262,43 +280,47 @@ In its first edition of L<<Slovo::Plugin::Prodan>> we implemented the following 
 =over 1
 
 =item A jQuery and localStorage based shopping cart. Two static files contain
-the implementation and they can be inflated as usual. The files are 
-C</css/cart.css> and C</js/cart.js>. These files will be inflated into your
-public forlder, for example C<lib/Slovo/resources/public>. Even not inflated
-these can be referred from any page or set of pages where you need their
-functionality. You need to have the following in your html (usually a
-template)
+the implementation and they can be inflated as usual. The files are
+C<</css/cart.css>> and C<</js/cart.js>>. You should inflate these files into
+your public forlder C<<domove/example.com/public>> for the domain on which you
+will use it. Even not inflated these will be referred from any page of the
+site. The site layout C<<layouts/site.html.ep>> includes automatically these
+two static files if this plugin is loaded.
 
-  <head>
-    <!-- your other stuff -->
-    <script src="/mojo/jquery/jquery.js" ></script>
-    <link rel="stylesheet" href="/css/cart.css" />
-    <script src="/js/cart.js" ></script>
-  </head>
+To add a product to your cart and make an order, you need a button, containing
+the product data. For example:
 
-To display the cart on the page, an C<aside> element C<aside#widgets> is required.
-In future versions this can be made configurable.
-To add a product to your cart, you need a button, containing the product
-data. For example:
-
-    <button class="add-to-cart"
-        data-id="978-619-91690-0-2"
+    <button class="primary sharer button add-to-cart"
+        title="книжно издание" data-sku="9786199169001" 
         data-title="Житие на света Петка Българска от свети патриарх Евтимий"
-        data-isbn="978-619-91690-0-2"
-        data-price="5.00">Add to cart</button>
+        data-weight="0.5" data-price="7.00"><img
+        src="/css/malka/book-open-page-variant-outline.svg">
+        <img src="/img/cart-plus-white.svg"></button>
 
-The only required properties are C<id>, C<title> and C<price>.
+See "A template..." below.
 
 =item A "Pay on delivery" integration with Bulgarian currier L<<Econt (in
 Bulgarian)|https://www.econt.com/developers/43-kakvo-e-dostavi-s-ekont.html>>.
 
+=item Products - a products SQL table to populate your pages with products. You
+create a page with several articles (celini) in it. These celini will be the
+pages for the products. You prepare a YAML file with products.  Each product
+C<<alias>> property must match exactly the celina C<<alias>> and C<<data_type>>
+on wich this product  will be placed. See C<<t/products.yaml>>
+andC<<t/update_products.yaml>> for examples.
+
+=item A template for displaying products within a C<<celina>>. You can modify
+this template as you wish to display other types of products - not just books
+as it is now. See C<<partials/_kniga.html.ep>> inlined in this file. It of
+course can be inflated using  L<<Slovo::Command::Author::inflate>>. The
+template produces the HTML from the products table, including the button
+mentioned above already.
+
 =back
 
-=head2 TODO
+=head2 TODO MAYBE
 
 =over 1
-
-=item Products - a products SQL table with Open API to populate your pages
 
 =item Invoices - generate an invoice in PDF via headless LibreOffice instance
 on your server.
@@ -307,7 +329,9 @@ on your server.
 automatically populate invoices.
 
 =item Other "Pay on Delivery" providers. Feel free to contibute yours. 
-=item Other types of Payments and/or online Payment Providers like online POS Terminals etc.
+
+=item Other types of Payments and/or Online Payment Providers like online POS
+Terminals etc.
 
 =back
 
@@ -317,15 +341,30 @@ The usual method is implemented.
 
 =head2 register
 
-Prepends the class to renderer and static classes.
+Prepends the class to renderer and static classes. Adds some REST API routes,
+configures the deliverer.
 
 =head1 EMBEDDED FILES
 
     @@ css/cart.css
     @@ js/cart.js
+    @@ img/arrow-collapse-all.svg
+    @@ img/cart-arrow-right.svg
+    @@ img/cart.svg
+    @@ img/cart-check.svg
+    @@ img/cart-off.svg
+    @@ img/cart-minus.svg
+    @@ img/cart-plus-white.svg
+    @@ img/cart-plus.svg
+    @@ img/cart-remove.svg
+    @@ img/econt.svg
+    @@ partials/_kniga.html.ep
+    @@ resources/data/prodan_migrations.sql
 
 =head1 SEE ALSO
 
+L<Slovo::Command::prodan::products>,
+L<Slovo>,
 L<Mojolicious::Guides::Tutorial/Stash and templates>,
 L<Mojolicious/renderer>,
 L<Mojolicious::Renderer>,
@@ -337,7 +376,7 @@ L<Slovo::Command::Author::inflate>
     Красимир Беров
     CPAN ID: BEROV
     berov на cpan точка org
-    http://i-can.eu
+    http://слово.бг
 
 =head1 CONTRIBUTORS
 
@@ -365,9 +404,7 @@ LICENSE file included with this module.
 This distribution contains icons from L<https://materialdesignicons.com/> and
 may contain other free software which belongs to their respective authors.
 
-
 =cut
-
 
 __DATA__
 
@@ -587,7 +624,65 @@ iframe#econt_shipment {
   }
 }
 
+.button.primary.sharer {
+  font-size: 80%;
+}
+
 /* end @media (max-width: 700px) */
+
+/* books (products) */
+
+section.book figure {
+  margin: 1rem;
+  clear: both;
+}
+
+section.book figure>img {
+  max-width: 200px;
+  max-height: 288px;
+  border: 1px solid black;
+}
+
+section.book figure>figcaption {
+  position: relative;
+  bottom: 0;
+}
+
+section.book table#meta {
+  margin-bottom: 2rem;
+  display: inline-table;
+  max-width: 75%;
+  min-width: 50%;
+}
+
+section.book table#meta th {
+  max-width: 15rem;
+}
+
+section.book table#meta th,
+table#meta td {
+  vertical-align: top;
+  border-bottom: 1px solid #ddd;
+  padding: 0.4rem 0.4rem;
+}
+
+.button.primary.sharer {
+  font-weight: bolder;
+  border-radius: 4px;
+  padding: .1rem .5rem;
+}
+
+section.book h2 {
+  margin: 0;
+}
+
+section.book summary {
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* end books (products) */
 
 @@ js/cart.js
 /* An unobtrusive shopping cart based on localStorage
@@ -632,8 +727,8 @@ jQuery(function ($) {
             src="/img/cart-check.svg" width="32" /></button> -->
 </th>
 </tr>
-<tr title="* При поръчка над 30 лв до офис на Еконт или Еконтомат, доставката е за наша сметка.">
-<th colspan="4">* При поръчка над 30 лв до офис на Еконт или Еконтомат, доставката е за наша сметка.</th>
+<tr title="* При поръчка над 35 лв до офис на Еконт или Еконтомат, доставката е за наша сметка.">
+<th colspan="4">* При поръчка над 35 лв до офис на Еконт или Еконтомат, доставката е за наша сметка.</th>
 </tfoot>
 </table>
 </div>
@@ -727,6 +822,7 @@ title="Ако желаете да добавите някакви подробн
             <div class="row"><div class="col">Адрес за получаване:</div>
                 <div class="col"><span id="city_name"></span><span id="address"></span></div>
             </div>
+            <div class="row"><div class="col">Товарителница:</div><div class="col" id="way_bill_id"></div></div>
             <!-- <div class="row"><div class="col">Допълнителни бележки:</div><div class="col" id="notes"></div></div> -->
         <table id="last_order_items">
             <cation class="text-center">Изделия</caption>
@@ -811,8 +907,8 @@ title="Ако желаете да добавите някакви подробн
         });
         /*
         const delivery_price = 4.00; // in he shop currency. Todo: make this a configuration value of the shop.
-        const free_delivery_sum = 30;
-        // VAT and delivery_price are included in the price if total sum < 30
+        const free_delivery_sum = 35;
+        // VAT and delivery_price are included in the price if total sum < free_delivery_sum
         if (sum > free_delivery_sum)
             $('th.delivery_price').text(0.00.toFixed(2));
         else
@@ -1104,11 +1200,19 @@ ${json.errors[0].message}
         // Get fresh o_d not older than 2 hours, because order_data may change
         // on the server and do not get order data on each display.
         if ((now - o_d.tstamp) > 3600 * 2) {
-            let url = `/api/poruchka/${o_d.deliverer}/${o_d.deliverer_id}?id=${o_d.id}`;
-            $.get(url).done(function (data) {
+            let req = $.ajax({
+                url: `/api/poruchka/${o_d.deliverer}/${o_d.deliverer_id}`,
+                method: 'PUT',
+                data: {
+                    id: o_d.id
+                },
+                dataType: 'json'
+            });
+            req.done(function (data) {
                 localStorage.setItem('order', JSON.stringify(data));
                 o_d = order = data;
-            }).fail(function (jqXHR, textStatus, errorThrown) {
+            });
+            req.fail(function (jqXHR, textStatus, errorThrown) {
                 console.log(jqXHR, textStatus, errorThrown);
                 alert(
                     'Състояние:' + textStatus +
@@ -1119,10 +1223,16 @@ ${json.errors[0].message}
         $(lol).remove();
         $('body').append(last_order_template);
         let delivery = ['deliverer_id', 'name', 'email', 'phone', 'deliverer', 'office_name', 'address'];
+        let lot = '#last_order_table';
         for (const k of delivery) {
             if (o_d[k])
-                k == 'deliverer' ? $(`#last_order_table #${k}`).text(deliverers[o_d[k]]) : $(`#last_order_table #${k}`).text(o_d[k]);
+                k == 'deliverer' ? $(`${lot} #${k}`).text(deliverers[o_d[k]]) : $(`${lot} #${k}`).text(o_d[k]);
         }
+
+        if (o_d.way_bill_id)
+            $(`${lot} #way_bill_id`)
+            .html(`<a target="_blank" href="https://www.econt.com/services/track-shipment/${o_d.way_bill_id}">${o_d.way_bill_id}</a>`);
+
         inline_order_items('#last_order_items', o_d.items);
         $('#last_order_items tfoot tr:last-child td:last-child')
             .text(`${o_d.shipping_price_cod} ${currency[o_d.shipping_price_currency]}`);
@@ -1268,6 +1378,64 @@ ${response}
 @@ img/econt.svg
 <svg version="1.1" width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"><path style="opacity:1;fill:#234182;fill-opacity:1;stroke-width:1.24709" d="M 6.1289062 -0.001953125 C 4.6048195 -0.017998455 3.2956311 1.2947208 3.125 3.0820312 L 1.5019531 20.080078 C 1.4422923 20.705007 1.5321941 21.30588 1.734375 21.841797 C 2.0990696 23.087443 3.2446653 23.992188 4.6113281 23.992188 L 17.267578 23.992188 C 18.929578 23.992188 20.267578 22.654187 20.267578 20.992188 C 20.267578 19.330188 18.929578 17.992188 17.267578 17.992188 L 7.7382812 17.992188 L 8.8828125 6 L 19.546875 6 C 21.208875 6 22.546875 4.662 22.546875 3 C 22.546875 1.338 21.208875 0 19.546875 0 L 6.484375 0 C 6.4201955 0 6.3580767 0.0058336146 6.2949219 0.009765625 C 6.2393916 0.0056858294 6.1839178 -0.001373973 6.1289062 -0.001953125 z M 15.328125 8.0390625 A 4 4 0 0 0 11.328125 12.039062 A 4 4 0 0 0 15.328125 16.039062 A 4 4 0 0 0 19.328125 12.039062 A 4 4 0 0 0 15.328125 8.0390625 z " /></svg>
 
+
+@@ partials/_kniga.html.ep
+<!-- _book -->
+<!-- <%= $domain->{templates} %> -->
+<section class="<%= $celina->{data_type} %>">
+%# Get the product variants for this page. These are rows from table products
+%# with the same alias like the page alias and with p_type same like celina
+%# data_type
+    %= t 'h' . $level => $celina->{title}
+<%
+my $books = $c->products->all({
+  columns => '*',
+  where   => {alias => $celina->{alias}, p_type => $celina->{data_type}}
+})->each(sub {
+  $_->{properties} = Mojo::JSON::from_json($_->{properties});
+});
+# $c->debug(' $books' => $books);
+%>
+<figure class="pull-left">
+    <img title="Лечителката и рунтавата ѝ котка" src="<%= $books->[0]{properties}{images}[0] %>">
+    <figcaption class="text-center">
+    За покупка<br>
+    % for my $b(@$books) {
+    % my $props = $b->{properties};
+        <button class="primary sharer button add-to-cart" 
+            title="<%= $props->{variant} %>"
+            data-sku="<%= $b->{sku} %>" data-title="<%= $b->{title} %>"
+            data-weight="<%= $props->{weight} %>" data-price="<%= $props->{price} %>"
+                ><img src="<%= $props->{button_icon} %>"> <img src="/img/cart-plus-white.svg"></button>
+    % }
+    </figcaption>
+</figure>
+<table id="meta">
+<tbody>
+<tr><th>Заглавие:</th><td><%= $books->[0]{title} %></td></tr>
+<tr><th>Автор:</th><td><%= $books->[0]{properties}{author} %></td></tr>
+<tr><th>Поредица:</th><td><%= $books->[0]{properties}{series} %></td></tr>
+<tr><th>Размери:</th><td><%= $books->[0]{properties}{dimensions} %></td></tr>
+% for my $b(@$books) {
+<tr><th></th><td></td></tr>
+<tr><th>ISBN:</th><td><%= $b->{sku} %></td></tr>
+<tr><th>Цена:</th><td><%= $b->{properties}{price} . ' лв. за ' . $b->{properties}{variant} %></td></tr>
+% }
+<tr><th>Откъси:</th><td><a class="primary button sharer" title="Изтегляне на откъси" href="<%= 
+    $books->[0]{properties}{exerpts_url}
+%>"><img src="/css/malka/file-pdf-box.svg"><img src="/css/malka/download.svg"></a></td></tr>
+<tr><th>Е-поща:</th><td><a class="primary button sharer" title="Поръчка по е-поща"
+href="mailto:poruchki@studio-berov.eu?subject=Поръчка: <%=$books->[0]{title}%>">
+<img src="/css/malka/email-fast-outline.svg">
+<img src="/css/malka/book-open-page-variant-outline.svg">
+Поръчка по е-поща
+</a></td></tr>
+</tbody>
+</table>
+%$celina->{body} .= include 'partials/_created_tstamp';
+%== format_body($celina)
+</section>
+
 @@ resources/data/prodan_migrations.sql
 
 -- 202112310000 up
@@ -1276,18 +1444,24 @@ ${response}
 CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sku VARCHAR(40) UNIQUE NOT NULL,
-  -- Lowercased and trimmed of \W characters unique identifier
-  alias VARCHAR(100) UNIQUE NOT NULL,
-  title VARCHAR(100) UNIQUE NOT NULL,
-  description VARCHAR(2000) NOT NULL DEFAULT '',
-  -- The product type: книга, картина, ръкоделие... etc/
-  type VARCHAR(16) NOT NULL,
+  -- Lowercased and trimmed of \W characters unique identifier.
+  -- Must be the same as the alias of the celina in which it will be embedded.
+  alias VARCHAR(100) NOT NULL,
+  -- Must be the same as the title of the celina in which it will be embedded.
+  title VARCHAR(155) UNIQUE NOT NULL,
+  -- The product type: книга(book), картина(painting), ръкоделие(handmade)
+  -- software... etc. If the plugin provides a template for the same celina
+  -- data_type. The template will rpelace the default Slovo template for this data
+  -- type and will retrieve from this table the product with the same alias as the
+  -- celina alias. The content of the celina will go after the products content.
+  p_type VARCHAR(32) DEFAULT 'book',
   -- the properties which are put in the data-* attributes
   -- of an "Add to cart" button such as data-sku, data-price,
   -- data-vat, data-vat_included, data-title, data-description, etc.
   properties JSON NOT NULL DEFAULT '{}'
 
 );
+CREATE UNIQUE INDEX IF NOT EXISTS sku_alias ON products(sku, alias);
 
 -- A list of orders for bying product by customers
 CREATE TABLE IF NOT EXISTS orders (
