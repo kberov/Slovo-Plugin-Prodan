@@ -4,7 +4,7 @@ use Mojo::Base 'Mojolicious::Plugin', -signatures;
 use Mojo::JSON qw(true false);
 
 our $AUTHORITY = 'cpan:BEROV';
-our $VERSION   = '0.01';
+our $VERSION   = '0.02';
 
 has app => sub { Slovo->new }, weak => 1;
 
@@ -676,12 +676,6 @@ section.book h2 {
   margin: 0;
 }
 
-section.book summary {
-  color: var(--color-primary);
-  cursor: pointer;
-  text-decoration: underline;
-}
-
 /* end books (products) */
 
 @@ js/cart.js
@@ -727,8 +721,8 @@ jQuery(function ($) {
             src="/img/cart-check.svg" width="32" /></button> -->
 </th>
 </tr>
-<tr title="* При поръчка над 35 лв до офис на Еконт или Еконтомат, доставката е за наша сметка.">
-<th colspan="4">* При поръчка над 35 лв до офис на Еконт или Еконтомат, доставката е за наша сметка.</th>
+<tr title="* При поръчка над 35 лв. до офис на Еконт или Еконтомат, доставката е за наша сметка.">
+<th colspan="4">* При поръчка над 35 лв. до офис на Еконт или Еконтомат, доставката е за наша сметка.</th>
 </tfoot>
 </table>
 </div>
@@ -783,7 +777,7 @@ title="Ако желаете да добавите някакви подробн
         <button class="button outline icon cart pull-right" title="Скриване на формуляра"
             id="hide_econt_order"><img 
                 src="/img/arrow-collapse-all.svg" width="32" /></button>
-    <h4><img src="/img/econt.svg" width="24" /> Поръчка (Доставка с Еконт)</h4>
+    <h4><img src="/img/econt.svg" width="24" />Доставка с Еконт</h4>
 
     <!-- В това поле ще се запази уникален индентификатор на адреса за доставка.
     Попълва се от JavaScript функцията която 'слуша' съобщенията от формата за
@@ -800,8 +794,8 @@ title="Ако желаете да добавите някакви подробн
     <!-- ФОРМА ЗА ДОСТАВКА -->
     <fieldset>
         <legend>Данни за доставка</legend>
-        <p>Повечето от полетата, които попълвате тук,
-        съдържат лични данни. Предоставяте ги на „Еконт Експрес“ ООД за да извърши доставката.</p>
+        <p>Полетата, които попълвате тук,
+        съдържат лични данни. Предоставяте ги на Еконт Експрес ООД единствено за извършване на доставката.</p>
     <iframe id="econt_shipment" src=""></iframe>
     </fieldset>
 </div>
@@ -857,12 +851,10 @@ title="Ако желаете да добавите някакви подробн
                 price: product.price
             };
         }
-        // display the cart in #cart_widget
+        // display the cart
         show_cart();
-        //Scroll to the top to show the cart because it is positioned absolutely.
-        $('html').animate({
-            scrollTop: 0
-        }, 300)
+        // expand it
+        $('#show_cart').trigger('click');
     }
 
     function cancel_order() {
@@ -1380,6 +1372,16 @@ ${response}
 
 
 @@ partials/_kniga.html.ep
+<%
+my $variants = $c->products->all({
+  columns => '*',
+  where   => {alias => $celina->{alias}, p_type => $celina->{data_type}}
+})->each(sub {
+  $_->{properties} = Mojo::JSON::from_json($_->{properties});
+});
+return unless @$variants;
+# $c->debug(' $variants' => $variants);
+%>
 <!-- _book -->
 <!-- <%= $domain->{templates} %> -->
 <section class="<%= $celina->{data_type} %>">
@@ -1387,45 +1389,35 @@ ${response}
 %# with the same alias like the page alias and with p_type same like celina
 %# data_type
     %= t 'h' . $level => $celina->{title}
-<%
-my $books = $c->products->all({
-  columns => '*',
-  where   => {alias => $celina->{alias}, p_type => $celina->{data_type}}
-})->each(sub {
-  $_->{properties} = Mojo::JSON::from_json($_->{properties});
-});
-# $c->debug(' $books' => $books);
-%>
 <figure class="pull-left">
-    <img title="Лечителката и рунтавата ѝ котка" src="<%= $books->[0]{properties}{images}[0] %>">
+    <img title="<%= $variants->[0]{title} %>" src="<%= $variants->[0]{properties}{images}[0] %>">
     <figcaption class="text-center">
     За покупка<br>
-    % for my $b(@$books) {
+    % for my $b(@$variants) {
     % my $props = $b->{properties};
-        <button class="primary sharer button add-to-cart" 
-            title="<%= $props->{variant} %>"
+        <a class="primary sharer button add-to-cart" href="#show_cart" title="<%= $props->{variant} %>"
             data-sku="<%= $b->{sku} %>" data-title="<%= $b->{title} %>"
             data-weight="<%= $props->{weight} %>" data-price="<%= $props->{price} %>"
-                ><img src="<%= $props->{button_icon} %>"> <img src="/img/cart-plus-white.svg"></button>
+                ><img src="<%= $props->{button_icon} %>"> <img src="/img/cart-plus-white.svg"></a>
     % }
     </figcaption>
 </figure>
 <table id="meta">
 <tbody>
-<tr><th>Заглавие:</th><td><%= $books->[0]{title} %></td></tr>
-<tr><th>Автор:</th><td><%= $books->[0]{properties}{author} %></td></tr>
-<tr><th>Поредица:</th><td><%= $books->[0]{properties}{series} %></td></tr>
-<tr><th>Размери:</th><td><%= $books->[0]{properties}{dimensions} %></td></tr>
-% for my $b(@$books) {
+<tr><th>Заглавие:</th><td><%= $variants->[0]{title} %></td></tr>
+<tr><th>Автор:</th><td><%= $variants->[0]{properties}{author} %></td></tr>
+<tr><th>Поредица:</th><td><%= $variants->[0]{properties}{series} %></td></tr>
+<tr><th>Размери:</th><td><%= $variants->[0]{properties}{dimensions} %></td></tr>
+% for my $b(@$variants) {
 <tr><th></th><td></td></tr>
 <tr><th>ISBN:</th><td><%= $b->{sku} %></td></tr>
 <tr><th>Цена:</th><td><%= $b->{properties}{price} . ' лв. за ' . $b->{properties}{variant} %></td></tr>
 % }
 <tr><th>Откъси:</th><td><a class="primary button sharer" title="Изтегляне на откъси" href="<%= 
-    $books->[0]{properties}{exerpts_url}
+    $variants->[0]{properties}{exerpts_url}
 %>"><img src="/css/malka/file-pdf-box.svg"><img src="/css/malka/download.svg"></a></td></tr>
 <tr><th>Е-поща:</th><td><a class="primary button sharer" title="Поръчка по е-поща"
-href="mailto:poruchki@studio-berov.eu?subject=Поръчка: <%=$books->[0]{title}%>">
+href="mailto:poruchki@studio-berov.eu?subject=Поръчка: <%=$variants->[0]{title}%>">
 <img src="/css/malka/email-fast-outline.svg">
 <img src="/css/malka/book-open-page-variant-outline.svg">
 Поръчка по е-поща
