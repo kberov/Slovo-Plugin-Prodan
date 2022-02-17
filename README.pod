@@ -12,8 +12,9 @@ Slovo::Plugin::Prodan - Make and manage sales in your Slovo-based site
     'Themes::Malka',
     {
       Prodan => {
-        migrate => 1,
-        econt   => {
+        migrate          => 1,
+        gdpr_consent_url => '/ѿносно/условия.bg.html',
+        econt            => {
           shop_id                 => $ENV{SLOVO_PRODAN_SHOP_ID},
           private_key             => $ENV{SLOVO_PRODAN_PRIVATE_KEY},
           shippment_calc_url      => 'https://delivery.econt.com/customer_info.php',
@@ -23,32 +24,36 @@ Slovo::Plugin::Prodan - Make and manage sales in your Slovo-based site
             'https://delivery.econt.com/services/OrdersService.createAWB.json'
         }}
     },
+    #...
   ],
 
 =head1 DESCRIPTION
 
 The word про̀дан (прода̀жба) in Bulgarian means sale. Roots are found in Old
-Common Slavic (Old Bulgarian) I<<проданьѥ>>. Here is an exerpt from Codex
-Suprasliensis(331.27) where this word was witnessed: I<<сꙑнъ божии. вол҄еѭ
-на сьпасьнѫѭ страсть съ вами придетъ. и на B<<продании>> станетъ.
-искѹпѹѭштааго животворьноѭ кръвьѭ. своеѭ миръ.>>
+Common Slavic (Old Bulgarian) I<проданьѥ>. Here is an exerpt from Codex
+Suprasliensis(331.27) where this word was witnessed: I<сꙑнъ божии. вол҄еѭ
+на сьпасьнѫѭ страсть съ вами придетъ. и на B<продании> станетъ.
+искѹпѹѭштааго животворьноѭ кръвьѭ. своеѭ миръ.>
 
-L<<Slovo::Plugin::Prodan>> is a L<<Mojolicious::Plugin>> that extends a
+L<Slovo::Plugin::Prodan> is a L<Mojolicious::Plugin> that extends a
 Slovo-based site and turns it into an online shop. 
 
 =head1 FEATURES
 
-In its first edition of L<<Slovo::Plugin::Prodan>> we implemented the following features:
+In this edition of L<Slovo::Plugin::Prodan> we implement the following features:
 
-=over 1
+=head2 A Shopping cart
 
-=item A jQuery and localStorage based shopping cart. Two static files contain
-the implementation and they can be inflated as usual. The files are
-C<</css/cart.css>> and C<</js/cart.js>>. You should inflate these files into
-your public forlder C<<domove/example.com/public>> for the domain on which you
+A jQuery and localStorage based shopping cart. Two static files contain
+the implementation and they can be inflated. The files are
+C</css/cart.css> and C</js/cart.js>. You should inflate these files into
+your public forlder C<domove/example.com/public> for the domain on which you
 will use it. Even not inflated these will be referred from any page of the
-site. The site layout C<<layouts/site.html.ep>> includes automatically these
+site. The site layout C<layouts/site.html.ep> includes automatically these
 two static files if this plugin is loaded.
+
+  # Inflate new static files from Slovo::Plugin::Prodan
+  bin/slovo inflate --class Slovo::Plugin::Prodan -p --path domove/xn--b1arjbl.xn--90ae/public
 
 To add a product to your cart and make an order, you need a button, containing
 the product data. For example:
@@ -62,26 +67,47 @@ the product data. For example:
 
 See "A template..." below.
 
-=item A "Pay on delivery" integration with Bulgarian currier L<<Econt (in
-Bulgarian)|https://www.econt.com/developers/43-kakvo-e-dostavi-s-ekont.html>>.
+=head2 Delivery of sold goods
 
-=item Products - a products SQL table to populate your pages with products. You
+A "Pay on delivery" integration with Bulgarian currier L<Econt (in
+Bulgarian)|https://www.econt.com/developers/43-kakvo-e-dostavi-s-ekont.html>.
+
+=head2 Products
+
+Products - a products SQL table to populate your pages with products. You
 create a page with several articles (celini) in it. These celini will be the
-pages for the products. You prepare a YAML file with products.  Each product
-C<<alias>> property must match exactly the celina C<<alias>> and C<<data_type>>
-on wich this product  will be placed. See C<<t/products.yaml>>
-andC<<t/update_products.yaml>> for examples.
+pages for the products. You prepare a YAML file with products. Each product
+C<alias> property must match exactly the celina C<alias> and C<data_type>
+on wich this product  will be placed. See C<t/products.yaml>
+and C<t/update_products.yaml> for examples. See
+L<Slovo::Command::prodan::products> on how to add and update products.
 
-=item A template for displaying products within a C<<celina>>. You can modify
-this template as you wish to display other types of products - not just books
-as it is now. See C<<partials/_kniga.html.ep>> inlined in this file. It of
-course can be inflated using  L<<Slovo::Command::Author::inflate>>. The
-template produces the HTML from the products table, including the button
-mentioned above already.
+=head2 Products template
 
-=back
+A template for displaying products within a C<celina>. You can modify this
+template as you wish to display other types of products - not just books as it
+is now. See C<partials/_kniga.html.ep> inlined in this file's C<__DATA__>
+section. It of course can be inflated using
+L<Slovo::Command::Author::inflate>. The template produces the HTML from the
+products table, including the button mentioned above already.
 
-=head2 TODO MAYBE
+  # Add the template form Prodan
+  bin/slovo inflate --class Slovo::Plugin::Prodan \
+    -t --path domove/xn--b1arjbl.xn--90ae/templates/themes/malka
+
+
+=head2 GDPR and Cookies consent
+
+A GDPR and cookies consent alert in the footer which upon click leads to the
+page (celina) where all conditions on using the site can be described. When the
+user clicks on the link to the I<Consent> page a flag in C<localStorage> is put
+so the alert is not shown any more. This flag disappears if the user clears any
+site data and the alert will appear again if the user vists the  site again.
+The Consent celina is created automatically in the localhost domain as an
+example. Search for C<gdpr_consent> in the source of this module to see how it
+is implemented.
+
+=head2 TODO some day
 
 =over 1
 
@@ -122,6 +148,7 @@ configures the deliverer.
     @@ img/cart-remove.svg
     @@ img/econt.svg
     @@ partials/_kniga.html.ep
+    @@ partials/_gdpr_consent.html.ep
     @@ resources/data/prodan_migrations.sql
 
 =head1 SEE ALSO
