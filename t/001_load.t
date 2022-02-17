@@ -1,5 +1,6 @@
 # t/001_load.t - check module loading
 use Test::More;
+
 my @classes = qw(
   Slovo::Plugin::Prodan
   Slovo::Model::Poruchki

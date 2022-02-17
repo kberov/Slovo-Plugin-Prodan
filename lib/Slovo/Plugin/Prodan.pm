@@ -4,7 +4,7 @@ use Mojo::Base 'Mojolicious::Plugin', -signatures;
 use Mojo::JSON qw(true false);
 
 our $AUTHORITY = 'cpan:BEROV';
-our $VERSION   = '0.02';
+our $VERSION   = '0.03';
 
 has app => sub { Slovo->new }, weak => 1;
 
@@ -16,6 +16,9 @@ sub register ($self, $app, $conf) {
   unshift @{$app->static->classes},   __PACKAGE__;
   $app->stylesheets('/css/cart.css');
   $app->javascripts('/js/cart.js');
+  $app->config->{gdpr_consent_url}
+    = $conf->{gdpr_consent_url} || '/ѿносно/условия.bg.html';
+
 
   # $app->log->debug(join $/, sort keys %INC);
   # $app->debug('Prodan $config', $conf);
@@ -25,6 +28,10 @@ sub register ($self, $app, $conf) {
   my $spec = $app->openapi_spec;
   %{$spec->{definitions}} = (%{$spec->{definitions}}, $self->_definitions);
   %{$spec->{paths}}       = (%{$spec->{paths}},       $self->_paths);
+
+  # Add new data_type for celina. Now a corresponding partial template can be
+  # used to render the new data_type.
+  push @{$spec->{parameters}{data_type}{enum}}, '_gdpr_consent';
   $app->plugin(OpenAPI => {spec => $spec});
 
   # $app->debug($spec);
@@ -112,11 +119,18 @@ sub _paths {
       get => {
         description => 'Provides data for the shop',
         'x-mojo-to' => 'poruchki#shop',
+        responses   => {default => {'$ref' => '#/definitions/ErrorResponse'}}}
+    },
+    '/gdpr_consent' => {
+      get => {
+        description => 'Page URL for GDPR concent',
+        'x-mojo-to' => 'poruchki#gdpr_consent',
         responses   => {
-
-          default => {'$ref' => '#/definitions/ErrorResponse'}}
-
-      }
+          200 => {
+            description => 'The URL to the detailed usage conditions, GDPR, cookies.',
+            schema      => {'$ref' => '#/definitions/GdprUrl'}
+          },
+          default => {'$ref' => '#/definitions/ErrorResponse'}}}
     },
   );
 }
@@ -175,6 +189,10 @@ sub _definitions {
         weight   => {type      => 'number'},
         price    => {type      => 'number'},
       }
+    },
+    GdprUrl => {
+      properties => {ihost => {type => 'string'}, url => {type => 'string'}},
+      required   => [qw(url ihost)],
     },
   );
 }
@@ -249,8 +267,9 @@ Slovo::Plugin::Prodan - Make and manage sales in your Slovo-based site
     'Themes::Malka',
     {
       Prodan => {
-        migrate => 1,
-        econt   => {
+        migrate          => 1,
+        gdpr_consent_url => '/ѿносно/условия.bg.html',
+        econt            => {
           shop_id                 => $ENV{SLOVO_PRODAN_SHOP_ID},
           private_key             => $ENV{SLOVO_PRODAN_PRIVATE_KEY},
           shippment_calc_url      => 'https://delivery.econt.com/customer_info.php',
@@ -260,32 +279,36 @@ Slovo::Plugin::Prodan - Make and manage sales in your Slovo-based site
             'https://delivery.econt.com/services/OrdersService.createAWB.json'
         }}
     },
+    #...
   ],
 
 =head1 DESCRIPTION
 
 The word про̀дан (прода̀жба) in Bulgarian means sale. Roots are found in Old
-Common Slavic (Old Bulgarian) I<<проданьѥ>>. Here is an exerpt from Codex
-Suprasliensis(331.27) where this word was witnessed: I<<сꙑнъ божии. вол҄еѭ
-на сьпасьнѫѭ страсть съ вами придетъ. и на B<<продании>> станетъ.
-искѹпѹѭштааго животворьноѭ кръвьѭ. своеѭ миръ.>>
+Common Slavic (Old Bulgarian) I<проданьѥ>. Here is an exerpt from Codex
+Suprasliensis(331.27) where this word was witnessed: I<сꙑнъ божии. вол҄еѭ
+на сьпасьнѫѭ страсть съ вами придетъ. и на B<продании> станетъ.
+искѹпѹѭштааго животворьноѭ кръвьѭ. своеѭ миръ.>
 
-L<<Slovo::Plugin::Prodan>> is a L<<Mojolicious::Plugin>> that extends a
+L<Slovo::Plugin::Prodan> is a L<Mojolicious::Plugin> that extends a
 Slovo-based site and turns it into an online shop. 
 
 =head1 FEATURES
 
-In its first edition of L<<Slovo::Plugin::Prodan>> we implemented the following features:
+In this edition of L<Slovo::Plugin::Prodan> we implement the following features:
 
-=over 1
+=head2 A Shopping cart
 
-=item A jQuery and localStorage based shopping cart. Two static files contain
-the implementation and they can be inflated as usual. The files are
-C<</css/cart.css>> and C<</js/cart.js>>. You should inflate these files into
-your public forlder C<<domove/example.com/public>> for the domain on which you
+A jQuery and localStorage based shopping cart. Two static files contain
+the implementation and they can be inflated. The files are
+C</css/cart.css> and C</js/cart.js>. You should inflate these files into
+your public forlder C<domove/example.com/public> for the domain on which you
 will use it. Even not inflated these will be referred from any page of the
-site. The site layout C<<layouts/site.html.ep>> includes automatically these
+site. The site layout C<layouts/site.html.ep> includes automatically these
 two static files if this plugin is loaded.
+
+  # Inflate new static files from Slovo::Plugin::Prodan
+  bin/slovo inflate --class Slovo::Plugin::Prodan -p --path domove/xn--b1arjbl.xn--90ae/public
 
 To add a product to your cart and make an order, you need a button, containing
 the product data. For example:
@@ -299,26 +322,47 @@ the product data. For example:
 
 See "A template..." below.
 
-=item A "Pay on delivery" integration with Bulgarian currier L<<Econt (in
-Bulgarian)|https://www.econt.com/developers/43-kakvo-e-dostavi-s-ekont.html>>.
+=head2 Delivery of sold goods
 
-=item Products - a products SQL table to populate your pages with products. You
+A "Pay on delivery" integration with Bulgarian currier L<Econt (in
+Bulgarian)|https://www.econt.com/developers/43-kakvo-e-dostavi-s-ekont.html>.
+
+=head2 Products
+
+Products - a products SQL table to populate your pages with products. You
 create a page with several articles (celini) in it. These celini will be the
-pages for the products. You prepare a YAML file with products.  Each product
-C<<alias>> property must match exactly the celina C<<alias>> and C<<data_type>>
-on wich this product  will be placed. See C<<t/products.yaml>>
-andC<<t/update_products.yaml>> for examples.
+pages for the products. You prepare a YAML file with products. Each product
+C<alias> property must match exactly the celina C<alias> and C<data_type>
+on wich this product  will be placed. See C<t/products.yaml>
+and C<t/update_products.yaml> for examples. See
+L<Slovo::Command::prodan::products> on how to add and update products.
 
-=item A template for displaying products within a C<<celina>>. You can modify
-this template as you wish to display other types of products - not just books
-as it is now. See C<<partials/_kniga.html.ep>> inlined in this file. It of
-course can be inflated using  L<<Slovo::Command::Author::inflate>>. The
-template produces the HTML from the products table, including the button
-mentioned above already.
+=head2 Products template
 
-=back
+A template for displaying products within a C<celina>. You can modify this
+template as you wish to display other types of products - not just books as it
+is now. See C<partials/_kniga.html.ep> inlined in this file's C<__DATA__>
+section. It of course can be inflated using
+L<Slovo::Command::Author::inflate>. The template produces the HTML from the
+products table, including the button mentioned above already.
 
-=head2 TODO MAYBE
+  # Add the template form Prodan
+  bin/slovo inflate --class Slovo::Plugin::Prodan \
+    -t --path domove/xn--b1arjbl.xn--90ae/templates/themes/malka
+
+
+=head2 GDPR and Cookies consent
+
+A GDPR and cookies consent alert in the footer which upon click leads to the
+page (celina) where all conditions on using the site can be described. When the
+user clicks on the link to the I<Consent> page a flag in C<localStorage> is put
+so the alert is not shown any more. This flag disappears if the user clears any
+site data and the alert will appear again if the user vists the  site again.
+The Consent celina is created automatically in the localhost domain as an
+example. Search for C<gdpr_consent> in the source of this module to see how it
+is implemented.
+
+=head2 TODO some day
 
 =over 1
 
@@ -359,6 +403,7 @@ configures the deliverer.
     @@ img/cart-remove.svg
     @@ img/econt.svg
     @@ partials/_kniga.html.ep
+    @@ partials/_gdpr_consent.html.ep
     @@ resources/data/prodan_migrations.sql
 
 =head1 SEE ALSO
@@ -801,6 +846,14 @@ title="Ако желаете да добавите някакви подробн
 </div>
 </div>
 `;
+    const gdpr_consent_template = `
+    <p id="gdpr_consent" class="col-7" style="font-size:medium;font-family:sans-serif">
+    Ние не ви следим с бисквитки. Доставчикът ни ползва бисквитки, когато поръчвате. 
+    Съгласявате се с <a class="gdpr_consent_url text-success" href="">„Условията за ползване"</a>
+    на <a id="gdpr_consent_ihost" href="/" class="text-success"></a>.
+    <a class="gdpr_consent_url button primary sharer text-success" href="">Добре!</a>
+    </p>
+`;
     const last_order_template = `
 <div id="last_order_layer" style="display:none">
     <div class="container card">
@@ -829,6 +882,7 @@ title="Ако желаете да добавите някакви подробн
     </div>
 </div>
     `;
+    show_gdpr_consent();
     show_cart();
     /* In a regular page we present a product(book, software package,
      * whatever). On the page there is one or more buttons(one per product)
@@ -1263,6 +1317,35 @@ ${json.errors[0].message}
         $('#cart_widget').remove();
     }
 
+    /**
+     * Show in the footer a line stating that we do not use cookies except for...
+     * */
+    function show_gdpr_consent() {
+        const gdpr_consent = JSON.parse(localStorage.getItem('gdpr_consent'));
+        if (gdpr_consent !== null && gdpr_consent.clicked === true) return;
+        if (gdpr_consent === null)
+            $.get('/api/gdpr_consent').done(function (data) {
+                set_gdpr_consent(data);
+            }).fail(function (jqXHR, textStatus, errorThrown) {
+                console.log(jqXHR, textStatus, errorThrown);
+            });
+        else
+            set_gdpr_consent(gdpr_consent);
+
+    } // end show_gdpr_consent()
+
+    function set_gdpr_consent(gdpr_consent) {
+        let footer = $('body>footer.is-fixed');
+        footer.prepend(gdpr_consent_template);
+        $('#gdpr_consent_ihost').text(gdpr_consent.ihost);
+        $('.gdpr_consent_url').prop('href', gdpr_consent.url);
+        $('.gdpr_consent_url').click(function () {
+            gdpr_consent.clicked = true;
+            localStorage.setItem('gdpr_consent', JSON.stringify(gdpr_consent));
+        });
+    } // end set_gdpr_consent(gdpr_consent) 
+
+
     /* All code below relates to email order and is not used currently. */
     /*************************************************/
     function show_email_order() {
@@ -1345,7 +1428,6 @@ ${response}
         ev.preventDefault();
     } // end function submit_order
 });
-
 @@ img/arrow-collapse-all.svg
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="24" height="24" viewBox="0 0 24 24"><path d="M19.5,3.09L20.91,4.5L16.41,9H20V11H13V4H15V7.59L19.5,3.09M20.91,19.5L19.5,20.91L15,16.41V20H13V13H20V15H16.41L20.91,19.5M4.5,3.09L9,7.59V4H11V11H4V9H7.59L3.09,4.5L4.5,3.09M3.09,19.5L7.59,15H4V13H11V20H9V16.41L4.5,20.91L3.09,19.5Z" /></svg>
 @@ img/cart-arrow-right.svg
@@ -1370,9 +1452,13 @@ ${response}
 @@ img/econt.svg
 <svg version="1.1" width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg"><path style="opacity:1;fill:#234182;fill-opacity:1;stroke-width:1.24709" d="M 6.1289062 -0.001953125 C 4.6048195 -0.017998455 3.2956311 1.2947208 3.125 3.0820312 L 1.5019531 20.080078 C 1.4422923 20.705007 1.5321941 21.30588 1.734375 21.841797 C 2.0990696 23.087443 3.2446653 23.992188 4.6113281 23.992188 L 17.267578 23.992188 C 18.929578 23.992188 20.267578 22.654187 20.267578 20.992188 C 20.267578 19.330188 18.929578 17.992188 17.267578 17.992188 L 7.7382812 17.992188 L 8.8828125 6 L 19.546875 6 C 21.208875 6 22.546875 4.662 22.546875 3 C 22.546875 1.338 21.208875 0 19.546875 0 L 6.484375 0 C 6.4201955 0 6.3580767 0.0058336146 6.2949219 0.009765625 C 6.2393916 0.0056858294 6.1839178 -0.001373973 6.1289062 -0.001953125 z M 15.328125 8.0390625 A 4 4 0 0 0 11.328125 12.039062 A 4 4 0 0 0 15.328125 16.039062 A 4 4 0 0 0 19.328125 12.039062 A 4 4 0 0 0 15.328125 8.0390625 z " /></svg>
 
-
 @@ partials/_kniga.html.ep
 <%
+# An example of using an existing data_type to extend its functionality. Note
+# that this template will replace the default one from Themes::Malka. So it is
+# maybe a better idea to create a new data_type and use a new corresponding
+# template. See the next template as an example of this simple technique to
+# plug anywhere in the site.
 my $variants = $c->products->all({
   columns => '*',
   where   => {alias => $celina->{alias}, p_type => $celina->{data_type}}
@@ -1427,6 +1513,23 @@ href="mailto:poruchki@studio-berov.eu?subject=Поръчка: <%=$variants->[0]{
 %$celina->{body} .= include 'partials/_created_tstamp';
 %== format_body($celina)
 </section>
+
+@@ partials/_gdpr_consent.html.ep
+<%
+# This template is practically the same as _writing.html.ep, but demosntrates a
+# good example how plugins can create their own 'data_type's and use templates
+# to display them on the site. Now if a celina has _gdpr_consent as data_type,
+# it will be rendered using this template. With this simple technique we open
+# the oportunity content provided by plugins to get seamlesly pluged anywhere
+# in the site, by just chosing the corresponding data_type.
+%>
+<!-- _gdpr_consent -->
+<section class="<%= $celina->{data_type} %>">
+    %= t 'h' . $level => $celina->{title}
+%$celina->{body} .= include 'partials/_created_tstamp';
+%==format_body($celina)
+</section>
+<!-- end _gdpr_consent -->
 
 @@ resources/data/prodan_migrations.sql
 
@@ -1513,4 +1616,31 @@ DROP TABLE IF EXISTS invoices;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS products;
 DROP TABLE IF EXISTS users_invoices_last_id;
+
+-- 202202170000 up
+
+INSERT OR IGNORE INTO celini
+(alias, pid, page_id, user_id, group_id,  data_type, data_format, created_at,
+tstamp, title, description, keywords, body, box, language, published)
+VALUES(
+    'условия',
+    (SELECT id from celini WHERE page_id=(
+            SELECT id FROM stranici WHERE alias='ѿносно' AND dom_id=0) AND data_type='title'),
+    (SELECT id FROM stranici WHERE alias='ѿносно'),
+    (SELECT user_id FROM stranici WHERE alias='ѿносно'),
+    (SELECT group_id FROM stranici WHERE alias='ѿносно'),
+    '_gdpr_consent',
+    'html',
+    1645051275,
+    1645051275,
+    'Условия за ползване на Слово.бг',
+    'Щом ползвате Слово.бг, вие се съгласявате със следните условия.',
+    'условия,позване,права,ОРДЗ,GDPR',
+    '<p>Щом ползвате Слово.бг, вие се съгласявате със следните условия.</p>',
+    'main', 'bg', 2
+);
+-- 202202170000 down
+DELETE from celini WHERE alias='условия' 
+AND pid=(SELECT id from celini WHERE page_id=(
+    SELECT id FROM stranici WHERE alias='ѿносно' AND dom_id=0) AND data_type='title');
 

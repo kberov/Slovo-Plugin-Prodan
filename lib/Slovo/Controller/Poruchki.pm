@@ -228,5 +228,17 @@ sub shop ($c) {
   return $c->render(openapi => $shop, status => 200);
 }
 
+# GET /api/gdpr_consent
+# Provides the url for the page where are described the detailed conditions to
+# use the site and the cookies policy - GDPR.
+# In the future it may also return the last modification date so the JavaScipt
+# can show the message again to the users, to notify them that there are
+# changes, even if the already greed to them.
+sub gdpr_consent ($c) {
+  return $c->render(
+    openapi => {ihost => $c->ihost_only, url => $c->config('gdpr_consent_url')},
+    status  => 200
+  );
+}
 1;
 
