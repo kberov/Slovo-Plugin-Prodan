@@ -22,6 +22,10 @@ my $app = $t->app;
 note $app->home;
 my $phone = $app->config->{phone_url};
 $t->get_ok($app->config->{gdpr_consent_url})->status_is(200)
+
+# In a regular browser like Firefox, the function set_gdpr_consent from cart.js
+# replaces the content on all pages except gdpr_consent_url with
+# gdpr_consent_template, unless the user had visited gdpr_consent_url.
   ->text_like('footer.is-fixed .social a.sharer:first-child' => qr/\Q$phone\E/);
 
 

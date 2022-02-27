@@ -147,8 +147,9 @@ configures the deliverer.
     @@ img/cart-plus.svg
     @@ img/cart-remove.svg
     @@ img/econt.svg
-    @@ partials/_kniga.html.ep
+    @@ partials/_footer_right.html.ep
     @@ partials/_gdpr_consent.html.ep
+    @@ partials/_kniga.html.ep
     @@ resources/data/prodan_migrations.sql
 
 =head1 SEE ALSO

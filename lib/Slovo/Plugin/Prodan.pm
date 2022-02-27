@@ -855,12 +855,11 @@ title="Ако желаете да добавите някакви подробн
 </div>
 `;
     const gdpr_consent_template = `
-    <p id="gdpr_consent" class="col-7" style="font-size:medium;font-family:sans-serif">
-    Ние не ви следим с бисквитки. Доставчикът ни ползва бисквитки, когато поръчвате. 
-    Съгласявате се с <a class="gdpr_consent_url text-success" href="">„Условията за ползване"</a>
+    <div id="gdpr_consent" class="col" style="font-size:medium;font-family:sans-serif">
+    Ние не ви следим. Доставчикът ни ползва бисквитки, когато поръчвате.
+    Продължавайки се съгласявате с <a class="gdpr_consent_url text-success" href="">„Условията за ползване"</a>
     на <a id="gdpr_consent_ihost" href="/" class="text-success"></a>.
-    <a class="gdpr_consent_url button primary sharer text-success" href="">Добре!</a>
-    </p>
+    </div>
 `;
     const last_order_template = `
 <div id="last_order_layer" style="display:none">
@@ -943,8 +942,8 @@ title="Ако желаете да добавите някакви подробн
             // make the cart button to toggle the visibility of the products table
             $('#show_cart').click(toggle_order_table_visibility);
             // append the email_order_form
-            if (!$('#email_order_layer').length)
-                $('body').append(email_order_template);
+            // if (!$('#email_order_layer').length)
+            //     $('body').append(email_order_template);
             // append the econt_order_template
             if (!$('#econt_order_layer').length)
                 $('body').append(econt_order_template);
@@ -1236,13 +1235,10 @@ title="Ако желаете да добавите някакви подробн
         req.fail(function (jqXHR, textStatus, errorThrown) {
             let json = JSON.parse(jqXHR.responseText);
             alert(`
-Нещо се обърка на сървъра.
-Опитайте да изпратите поръчката си на poruchki@studio-berov.eu.
-Молим, изпратете снимка на екрана си, за да ни
-улесните в отстраняването на грешката.
 Състояние: ${jqXHR.status} ${errorThrown}
 ГРЕШКА: ${json.errors[0].path}
 ${json.errors[0].message}
+Нещо се обърка на сървъра.
 `);
         });
     } // end place_econt_order(form)
@@ -1340,21 +1336,26 @@ ${json.errors[0].message}
             });
         else
             set_gdpr_consent(gdpr_consent);
-
     } // end show_gdpr_consent()
 
     function set_gdpr_consent(gdpr_consent) {
         // Do not show the message and store the consent if we are on the
         // gdpr_consent.url page.
+        let footer = $('body>footer.is-fixed')
         if (decodeURI(window.location.pathname) === gdpr_consent.url) {
             gdpr_consent.visited = true;
             localStorage.setItem('gdpr_consent', JSON.stringify(gdpr_consent));
+            // A button, that gets the user to where he/she was.
+            // Note! It is important to not use the window.history object so
+            // the page loads fresh with no gdpr_consent message.
+            footer.html(`<a href="${document.referrer}"
+                title="Назад, откъдето дойдох."
+                class="col outline button text-success">Добре!</a>`);
             return;
         }
-        let footer = $('body>footer.is-fixed')
-        footer.prepend(gdpr_consent_template);
+        footer.html(gdpr_consent_template);
         $('#gdpr_consent_ihost').text(gdpr_consent.ihost);
-        $('.gdpr_consent_url').prop('href', gdpr_consent.url);
+        $('.gdpr_consent_url').attr('href', gdpr_consent.url);
         localStorage.setItem('gdpr_consent', JSON.stringify(gdpr_consent));
     } // end set_gdpr_consent(gdpr_consent) 
 
@@ -1441,6 +1442,7 @@ ${response}
         ev.preventDefault();
     } // end function submit_order
 });
+
 @@ img/arrow-collapse-all.svg
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="24" height="24" viewBox="0 0 24 24"><path d="M19.5,3.09L20.91,4.5L16.41,9H20V11H13V4H15V7.59L19.5,3.09M20.91,19.5L19.5,20.91L15,16.41V20H13V13H20V15H16.41L20.91,19.5M4.5,3.09L9,7.59V4H11V11H4V9H7.59L3.09,4.5L4.5,3.09M3.09,19.5L7.59,15H4V13H11V20H9V16.41L4.5,20.91L3.09,19.5Z" /></svg>
 @@ img/cart-arrow-right.svg
@@ -1566,6 +1568,7 @@ return unless @$variants;
 % for my $b(@$variants) {
 <tr><th></th><td></td></tr>
 <tr><th>ISBN:</th><td><%= $b->{sku} %></td></tr>
+<tr><th>Тегло:</th><td><%= sprintf('%.3f', $b->{properties}{weight}) %> кг.</td></tr>
 <tr><th>Цена:</th><td><%= $b->{properties}{price} . ' лв. за ' . $b->{properties}{variant} %></td></tr>
 % }
 <tr><th>Откъси:</th><td><a class="primary button sharer" title="Изтегляне на откъси" href="<%= 
