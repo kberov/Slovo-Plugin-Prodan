@@ -730,21 +730,40 @@ section.book figure>figcaption {
 }
 
 section.book table#meta {
-  margin-bottom: 2rem;
-  display: inline-table;
-  max-width: 75%;
-  min-width: 50%;
+  width: 100%;
 }
 
 section.book table#meta th {
-  max-width: 15rem;
+  max-width: 7rem;
+  min-width: 5rem;
 }
 
 section.book table#meta th,
 table#meta td {
   vertical-align: top;
   border-bottom: 1px solid #ddd;
-  padding: 0.4rem 0.4rem;
+  padding: 0.4rem 0.8rem;
+}
+
+section.book table#meta tr:last-child th,
+table#meta tr:last-child td {
+  border-bottom: none;
+}
+
+section.book table#meta tr.separator {
+  border-top: 2px solid var(--color-lightGrey);
+}
+
+/* other books */
+
+section.book div.row.text-left div.col.card {
+  height: 128px;
+  min-width: 12rem;
+  max-width: 12rem;
+}
+
+section.book div.row.text-left div.col.card img {
+  height: 110px;
 }
 
 .button.primary.sharer {
@@ -764,7 +783,7 @@ section.book h2 {
 }
 
 .referrer {
-    color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 /* end books (products) */
@@ -1575,7 +1594,8 @@ my $phone_url =  app->config->{consents}{phone_url};
 # maybe a better idea to create a new data_type and use a new corresponding
 # template. See the next template as an example of this simple technique to
 # plug anywhere in the site.
-my $variants = $c->products->all({
+my $books = $c->products;
+my $variants = $books->all({
   columns => '*',
   where   => {alias => $celina->{alias}, p_type => $celina->{data_type}}
 })->each(sub {
@@ -1591,44 +1611,78 @@ return unless @$variants;
 %# with the same alias like the page alias and with p_type same like celina
 %# data_type
     %= t 'h' . $level => $celina->{title}
-<figure class="pull-left">
-    <img title="<%= $variants->[0]{title} %>" src="<%= $variants->[0]{properties}{images}[0] %>">
-    <figcaption class="text-center">
-    За покупка<br>
-    % for my $b(@$variants) {
-    % my $props = $b->{properties};
-        <a class="primary sharer button add-to-cart" href="#show_cart" title="<%= $props->{variant} %>"
-            data-sku="<%= $b->{sku} %>" data-title="<%= $b->{title} %>"
-            data-weight="<%= $props->{weight} %>" data-price="<%= $props->{price} %>"
-                ><img src="<%= $props->{button_icon} %>"> <img src="/img/cart-plus-white.svg"></a>
-    % }
-    </figcaption>
-</figure>
-<table id="meta">
-<tbody>
-<tr><th>Заглавие:</th><td><%= $variants->[0]{title} %></td></tr>
-<tr><th>Автор:</th><td><%= $variants->[0]{properties}{author} %></td></tr>
-<tr><th>Поредица:</th><td><%= $variants->[0]{properties}{series} %></td></tr>
-<tr><th>Размери:</th><td><%= $variants->[0]{properties}{dimensions} %></td></tr>
-% for my $b(@$variants) {
-<tr><th></th><td></td></tr>
-<tr><th>ISBN:</th><td><%= $b->{sku} %></td></tr>
-<tr><th>Тегло:</th><td><%= sprintf('%.3f', $b->{properties}{weight}) %> кг.</td></tr>
-<tr><th>Цена:</th><td><%= $b->{properties}{price} . ' лв. за ' . $b->{properties}{variant} %></td></tr>
-% }
-<tr><th>Откъси:</th><td><a class="primary button sharer" title="Изтегляне на откъси" href="<%= 
-    $variants->[0]{properties}{exerpts_url}
-%>"><img src="/css/malka/file-pdf-box.svg"><img src="/css/malka/download.svg"></a></td></tr>
-<tr><th>Е-поща:</th><td><a class="primary button sharer" title="Поръчка по е-поща"
-href="mailto:poruchki@studio-berov.eu?subject=Поръчка: <%=$variants->[0]{title}%>">
-<img src="/css/malka/email-fast-outline.svg">
-<img src="/css/malka/book-open-page-variant-outline.svg">
-Поръчка по е-поща
-</a></td></tr>
-</tbody>
-</table>
-%$celina->{body} .= include 'partials/_created_tstamp';
+<div class="row">
+    <figure class="col-3 text-center">
+        <img title="<%= $variants->[0]{title} %>" src="<%= $variants->[0]{properties}{images}[0] %>">
+        <figcaption class="text-center">
+        %= $variants->first(sub {$_->{properties}{in_store}}) ? 'За покупка' : 'Изчерпана';
+        <br />
+        % for my $b(@$variants) {
+        % my $props = $b->{properties}; next unless $props->{in_store};
+            <a class="primary sharer button add-to-cart" href="#show_cart" title="<%= $props->{variant} %>"
+                data-sku="<%= $b->{sku} %>" data-title="<%= $b->{title} %>"
+                data-weight="<%= $props->{weight} %>" data-price="<%= $props->{price} %>"
+                    ><img src="<%= $props->{button_icon} %>"> <img src="/img/cart-plus-white.svg"></a>
+        % }
+        </figcaption>
+    </figure>
+    <table id="meta" class="col card">
+        <tbody>
+        <tr><th>Заглавие:</th><td><%= $variants->[0]{title} %></td></tr>
+        <tr><th>Автор:</th><td><%= $variants->[0]{properties}{author} %></td></tr>
+        % if($variants->[0]{properties}{translator}) {
+        <tr><th>Преводач:</th><td><%= $variants->[0]{properties}{translator} %></td></tr>
+        % }
+        % if($variants->[0]{properties}{series}) {
+        <tr><th>Поредица:</th><td><%= $variants->[0]{properties}{series} %></td></tr>
+        % }
+        <tr><th>Размери:</th><td><%= $variants->[0]{properties}{dimensions} %></td></tr>
+        % for my $b(@$variants) {
+        % my $props = $b->{properties};
+        <tr class="separator">
+        <th>Издание:</th><td><%= $props->{variant} %></td></tr>
+        <tr><th>ISBN:</th><td><%= $b->{sku} %></td></tr>
+        <tr><th>Тегло:</th><td><%= sprintf('%.3f', $props->{weight}) %> кг.</td></tr>
+        <tr class="price"><th>Цена:</th><td><%= $props->{price} . ' лв. за ' . $props->{variant} %></td></tr>
+        % }
+        <tr class="separator">
+        % if($variants->[0]{properties}{exerpts_url}) {
+        <th>Откъси:</th><td><a class="primary button sharer" title="Изтегляне на откъси" href="<%= 
+            $variants->[0]{properties}{exerpts_url}
+        %>"><img src="/css/malka/file-pdf-box.svg"><img src="/css/malka/download.svg"></a></td></tr>
+        % }
+        <tr><th>Е-поща:</th><td><a class="primary button sharer" title="Заявка по е-поща"
+        href="mailto:poruchki@studio-berov.eu?subject=Заявка: <%=$variants->[0]{title}%>">
+        <img src="/css/malka/email-fast-outline.svg">
+        <img src="/css/malka/book-open-page-variant-outline.svg">
+        Заявка по е-поща
+        </a></td></tr>
+        </tbody>
+    </table>
+</div><!-- end class="row" -->
+
+% $celina->{body} .= include 'partials/_created_tstamp';
 %== format_body($celina)
+
+%# all celini which have books in them in the same page
+% my $others = $books->others($celina);
+% if(@$others) {
+<h4>Други книги</h4>
+<div class="row text-left">
+<%
+# $c->debug('other books: ' => $others);
+foreach my $b(@{$others->shuffle}) {
+    my $props = $b->{properties};
+%>
+<div class="col card text-center">
+    <a href="<%= url_for(page_alias => $page->{alias}, paragraph_alias => $b->{alias}, lang => $b->{language}) %>"
+        title="<%= "$b->{title}, $props->{author}" %>">
+        <img src="<%=$props->{images}[0]%>" style="<%= $props->{in_store} ? '' : 'filter:opacity(0.2)' %>">
+    </a>
+</div>
+% } # end foreach
+</div>
+% } #end if @$others
 </section>
 
 @@ resources/data/prodan_migrations.sql

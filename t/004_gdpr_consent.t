@@ -28,6 +28,6 @@ my $json = $t->get_ok($app->url_for('/api/consents'))->status_is(200)
 
 note explain $json;
 $t->get_ok($json->{gdpr_url})->status_is(200)
-  ->text_like('section._gdpr_consent p:first-child' => qr/^Щом/);
+  ->text_like('section._consents p:first-child' => qr/^Щом/);
 
 done_testing;
