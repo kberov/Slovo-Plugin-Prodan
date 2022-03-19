@@ -1,9 +1,7 @@
 package Slovo::Command::prodan::products;
 use Mojo::Base 'Slovo::Command', -signatures;
-use Mojo::File qw(path);
-use Mojo::Loader qw(data_section file_is_binary);
 use Mojo::Util qw(encode decode getopt dumper);
-use YAML::XS qw(Dump DumpFile LoadFile);
+use YAML::XS qw(Dump DumpFile LoadFile Load);
 use Mojo::JSON qw(to_json);
 has description => 'Manage products on the command line';
 
@@ -25,7 +23,7 @@ sub run ($self, @args) {
     'f|file=s'  => \(my $file  = ''),
     'w|where=s' => \(my $where = ''),
     'l|limit=i' => \(my $limit = 100),
-    'o|ofset=s' => \(my $ofset = 0);
+    'o|ofset=i' => \(my $ofset = 0);
   my $file_actions  = join('|', @{$self->actions}[0 .. 2]);
   my $where_actions = join('|', @{$self->actions}[3 .. 4]);
   if ($action =~ /$file_actions/) {
@@ -91,9 +89,19 @@ sub _delete ($self, $where, $limit, $offset) {
 }
 
 sub _list ($self, $where, $limit, $offset) {
-  STDOUT->say('Action list - Not implemented' . $/, $self->usage);
+  $where = $where ? decode(UTF8 => "WHERE $where") : '';
+  my $sql      = "SELECT * FROM products $where LIMIT $limit OFFSET $offset";
+  my $products = eval { $self->app->dbx->db->query($sql)->hashes }
+    || Carp::croak("Wrong SQL:\n$sql\n\n$@");
+
+  printf("sku\t\ttitle\n---\nproperties\n\n");
+  for my $p (@$products) {
+    my $sku_title = encode UTF8 => sprintf("%s\t%s\n", $p->{sku}, $p->{title});
+    STDOUT->say($sku_title, Dump Load encode UTF8 => $p->{properties});
+  }
   return;
 }
+
 1;
 
 =encoding utf8

@@ -89,10 +89,8 @@ my $product_command = sub {
     $command->run;
   }
 
-# note $buffer;
-  like $buffer => qr/Not\simplemented/x => 'list action is not implemented yet';
-  like $buffer => qr/prodan/x           => 'prodan in $buffer';
-  like $buffer => qr/products/x         => 'products in $buffer';
+  # note $buffer;
+  like $buffer => qr/sku\t\ttitle/x => 'default action list action';
 
 # Add products
   $buffer = '';
@@ -121,6 +119,23 @@ my $product_command = sub {
     'Житие на света Петка Българска от свети патриарх Евтимий'
   );
   my @paper_prices = ('14.00', '7.00');
+
+
+# List products
+
+  $buffer = '';
+  {
+    open my $handle, '>', \$buffer;
+    local *STDOUT = $handle;
+    local *STDERR = $handle;
+    $command->run('list', '-where' => encode(UTF8 => "title like 'Лечителката%'"));
+  }
+  $buffer = decode(utf8 => $buffer);
+  note $buffer;
+  like $buffer => qr/sku\t\ttitle/x    => 'default action list action';
+  like $buffer => qr/9786199169025/smx => 'sku in $buffer';
+  like $buffer => qr/Лечителката/smx   => 'title in $buffer';
+
 
   # see the products on the pages
   for (0 .. @books - 1) {

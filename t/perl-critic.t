@@ -10,6 +10,10 @@ if ($EVAL_ERROR) {
   plan(skip_all => $msg);
 }
 
+unless ($ENV{TEST_AUTHOR}) {
+  plan(skip_all => 'Set $ENV{TEST_AUTHOR} to a true value to run this test.');
+}
+
 my $rcfile = dirname(__FILE__) . '/../.perlcriticrc';
 
 Test::Perl::Critic->import(-profile => $rcfile, -verbose => 10);

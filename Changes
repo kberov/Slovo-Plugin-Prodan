@@ -1,5 +1,9 @@
 Revision history for Slovo plugin Slovo::Plugin::Prodan
 
+0.06 Implemented subcommand `products list`.
+     Fixed failing tests.
+
+
 0.05 Reorganised 'gdpr_consent' into 'consents' configuration section.
      Here urls for common consent related pages will be put. Added setting
      delivery_prices_url - the page where the delivery prices are.
