@@ -1,26 +1,122 @@
 package Slovo::Command::prodan::bookmaker;
 use Mojo::Base 'Slovo::Command', -signatures;
 use Mojo::Util qw(encode decode getopt dumper);
+use Mojo::JSON qw(from_json);
+use Mojo::File qw(path);
 use Mojo::Collection qw(c);
+use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
 
+has args =>
+  sub { {skus => [], names => '', files => [], email => '', to => 'PDF', send => 0} };
 has description => 'Generate password protected PDF from ODT';
-has usage   => sub { shift->extract_usage };
-has files => sub {c()};
+has usage       => sub { shift->extract_usage };
+has files       => sub { c() };
+has tempdir     => sub {
+  Mojo::File::tempdir('booksXXXX', TMPDIR => 1, CLEANUP => 0);
+};
 
-my @vowels = qw(A Y E I O U);
-my @all = ('A' .. 'Z','!','@',';','.','~','%','#','^','*','-','_','+','=','/','?');
-my $count = scalar @vowels;
-my $syllables =    c(@all)->shuffle->map(sub{ $_.$vowels[int rand($count)]});
+my %TO_FORMATS = (PDF => \&_files_to_PDF,);
+my @vowels     = qw(A Y E I O U);
+my @all        = ('A' .. 'Z', 1 .. 9);
+my $count      = scalar @vowels;
+my $syllables  = c(@all)->shuffle->map(sub { $_ . $vowels[int rand($count)] });
 
 has password => sub {
-    $syllables->shuffle->head(5)->join;   
+  $syllables->shuffle->head(5)->join;
 };
 
 sub run ($self, @args) {
 
-    return $self;
+  # read and validate arguments
+  $self->_parse_args(@args);
+
+  # figure out the ODT files to read
+  $self->_find_files();
+
+  # copy them for modification with the new filename
+  $self->_copy_files;
+
+  # modify the style file footer for each file
+  $self->_personalize_files;
+
+  # generate the new PDFs
+  $TO_FORMATS{$self->args->{to}}->($self);
+
+  # delete the new ODT files - not needed anymore
+  $self->_delete_personalized_files;
+
+  # optionally send an email or just display the url and password
+  return $self;
 }
 
+sub _parse_args ($self, @args) {
+  my $args = $self->args;
+  getopt \@args,
+    's|skus=s@'  => \($args->{skus}),
+    'n|names=s'  => \($args->{names}),
+    'e|email=s'  => \($args->{email}),
+    'f|files=s@' => \($args->{files}),
+    't|to=s'     => \($args->{to}),
+    'send'       => \($args->{send});
+  $args->{to} = uc $args->{to};
+  return $self->args($args);
+}
+
+sub _find_files ($self) {
+  my $args = $self->args;
+  my $skus
+    = $self->app->dbx->db->select('products', '*', {sku => {-in => $args->{skus} // []}})
+    ->hashes;
+  my @files;
+  for my $pr (@$skus) {
+    my $props = from_json $pr->{properties};
+    Carp::croak "$props->{file} does not exist" unless -f $props->{file};
+    push @files, $props->{file};
+  }
+
+  for my $f (@{$args->{files}}) {
+    Carp::croak "$f does not exist" unless -f $f;
+    push @files, $f;
+  }
+  return $self->files(c(@files));
+}
+
+sub _copy_files ($self) {
+  my $tmp = $self->tempdir;
+  eval { $tmp->make_path({mode => 0711}) } or Carp::croak $@;
+
+  # replace the file-names with the new paths
+  my $sufix = $syllables->shuffle->head(3)->join;
+  $self->files->each(sub {
+    my ($f) = $_ =~ m|([^/]+)$|;                # filename only
+    $f =~ s/(\.[^.]+)$/-$sufix$1/;              # add the suffix to the basename
+    $_ = path($_)->copy_to($tmp->child($f));
+  });
+  return $self;
+}
+
+
+# add the names and email to the footer
+sub _personalize_files ($self) {
+  my $args             = $self->args;
+  my $styles_file_name = 'styles.xml';
+  for my $f (@{$self->files}) {
+    my $odt              = Archive::Zip->new($f->to_string);
+    my $styles_as_string = $odt->contents($styles_file_name);
+
+    # replace the pattern with personal info - name and email
+    $styles_as_string =~ s /NAMES_AND_EMAIL/$args->{names} &lt;$args->{email}&gt;/g;
+    $odt->contents($styles_file_name, $styles_as_string);
+    $odt->overwrite();
+  }
+
+  return $self;
+}
+
+sub _files_to_PDF ($self) {
+
+  return $self;
+}
 1;
 
 =encoding utf8
@@ -40,11 +136,13 @@ Slovo::Command::prodan::bookmaker - generate password protected PDF from ODT.
 
   Options:
     -h, --help  Show this summary of available options
-    -s, --sku   Unique identifier of the book in the products table. Can be many.
+    -s, --skus  Unique identifiers of the books in the products table. Can be many.
     -n, --names Names of the person for which to prepare the files.
     -e, --email Email to which to send download links.
-    -f, --file  Filename which to convert. Can be many.
+    -f, --files Source Filename which to copy, modify and convert. Can be many.
     -t, --to    Format to which to convert the ODT file. For now only PDF.
+                Defaults to PDF.
+        --send  Boolean. Send the urls to files via email on the provided email.
 
 =head1 DESCRIPTION
 
@@ -68,6 +166,18 @@ file.
 =head1 ATTRIBUTES
 
 Slovo::Command::prodan::bookmaker has the following attributes.
+
+=head2 args
+
+Parsed arguments right after L</run> is invoked.
+
+    $self->args({
+      skus  => ['9786199169032'],
+      files => 'somewhere/book.odt',
+      names => 'Краси Беров',
+      to    => 'PDF'
+    });
+    my $args = $self->args;
 
 =head2 description
 
@@ -105,3 +215,6 @@ Slovo::Command::prodan::bookmaker implements the following methods.
 Implementation of the execution of the command. Returns C<$self>.
 
     $bookmaker = $bookmaker->run(@args);
+
+=cut
+

@@ -45,7 +45,7 @@ sub run ($self, @args) {
     $action = "_$action";
     $self->$action($where, $limit, $ofset);
   }
-  return;
+  return $self;
 }
 
 sub _create ($self, $file) {

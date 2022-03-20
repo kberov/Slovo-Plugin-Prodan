@@ -14,6 +14,7 @@
   }
 - {sku: 9786199169032, alias: лечителката, title: 'PDF Лечителката и рунтавата ѝ котка', p_type: book, 
   properties: {
+      file: t/лечителката.odt,
       price: 9.81, weight: 0.0,
       button_icon: /css/malka/file-pdf-box.svg, 
       exerpts_url: /books/lechitelkata-otkusi.pdf, variant: PDF,in_store: true

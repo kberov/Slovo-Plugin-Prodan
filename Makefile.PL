@@ -9,7 +9,7 @@ use utf8;
 # the contents of the Makefile that is written.
 my $module_file = 'lib/' .                       (__PACKAGE__ =~ s|::|/|gr) . '.pm';
 my $git_url     = 'https://github.com/kberov/' . (__PACKAGE__ =~ s|::|-|gr);
-my $PREREQ_PM   = {'Slovo' => '2022.02.16', 'YAML::XS' => '0',};
+my $PREREQ_PM   = {'Slovo' => '2022.02.16', 'YAML::XS' => '0', 'Archive::Zip' => '1.68'};
 
 WriteMakefile(
   NAME               => __PACKAGE__,

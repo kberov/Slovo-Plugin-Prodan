@@ -122,7 +122,6 @@ my $product_command = sub {
 
 
 # List products
-
   $buffer = '';
   {
     open my $handle, '>', \$buffer;
