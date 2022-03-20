@@ -30,7 +30,7 @@ Mojolicious-*.tar.gz
 # Files created by IDEs and Editors
 *.swp
 /*.komodoproject
-/tags
+tags
 .tags*
 *.iml
 .idea

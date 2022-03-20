@@ -112,10 +112,18 @@ Slovo::Command::prodan::products - manage products on the command line
 
 =head1 SYNOPSIS
 
+  Usage:
     slovo prodan products create --from ./products.yaml
     slovo prodan products update --from ./products.yaml
     slovo prodan products list   --where "alias like'%лечителката%'"
     slovo prodan products delete --where "alias like'%лечителката%'"
+
+  Actions: create, update, list, delete
+
+  Options:
+    -h, --help  Show this summary of available options.
+    -f, --from  File from which to get the properties of the products.
+    -w, --where SQL clause for filtering products for deleting or listing.
 
 =head1 DESCRIPTION
 
