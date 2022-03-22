@@ -5,12 +5,14 @@ use Mojo::JSON qw(from_json);
 use Mojo::File qw(path);
 use Mojo::Collection qw(c);
 use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
-
+use IPC::Cmd qw(can_run);
 has args =>
   sub { {skus => [], names => '', files => [], email => '', to => 'PDF', send => 0} };
 has description => 'Generate password protected PDF from ODT';
+has error       => '';
 has usage       => sub { shift->extract_usage };
 has files       => sub { c() };
+has success     => 0;
 has tempdir     => sub {
   Mojo::File::tempdir('booksXXXX', TMPDIR => 1, CLEANUP => 0);
 };
@@ -46,6 +48,7 @@ sub run ($self, @args) {
   $self->_delete_personalized_files;
 
   # optionally send an email or just display the url and password
+  $self->_send_file_urls if $self->args->{send};
   return $self;
 }
 
@@ -86,7 +89,7 @@ sub _copy_files ($self) {
   eval { $tmp->make_path({mode => 0711}) } or Carp::croak $@;
 
   # replace the file-names with the new paths
-  my $sufix = $syllables->shuffle->head(3)->join;
+  my $sufix = $syllables->shuffle->head(2)->join;
   $self->files->each(sub {
     my ($f) = $_ =~ m|([^/]+)$|;                # filename only
     $f =~ s/(\.[^.]+)$/-$sufix$1/;              # add the suffix to the basename
@@ -113,7 +116,60 @@ sub _personalize_files ($self) {
   return $self;
 }
 
+# man unoconv
+# https://wiki.openoffice.org/wiki/API/Tutorials/PDF_export
 sub _files_to_PDF ($self) {
+  state $app       = $self->app;
+  state $pdf_dir   = $app->home->child('/data/pdf')->to_string;
+  state $full_path = can_run('unoconv');
+  Carp::croak(
+    'unoconv was not found! Please install it first. ',
+    'On Debian and derivatives `sudo apt install unoconv`'
+  ) unless $full_path;
+  my $output_dir = eval { path("$pdf_dir/out" . time)->make_path({mode => 0711}); }
+    or Carp::croak $@;
+
+  my $files   = $self->files->map(sub { $_->to_string });
+  my $unoconv = [
+    $full_path,
+    '-e' => 'ReduceImageResolution=true',
+    '-e' => 'MaxImageResolution=96',
+    '-e' => 'ExportBookmarks=true',
+    '-e' => 'InitialView=1',
+    '-e' => 'Magnification=2',
+    '-e' => 'OpenBookmarkLevels=3',
+    '-e' => 'EncryptFile=true',
+    '-e' => 'DocumentOpenPassword=' . $self->password,
+    '-e' => 'RestrictPermissions=true',
+    '-e' => 'Printing=0',
+    '-e' => 'Changes=0',
+    '-e' => 'EnableCopyingOfContent=false',
+    '-e' => 'EnableTextAccessForAccessibilityTools=false',
+    '-f' => 'pdf',
+    '-o' => $output_dir,
+    @$files
+  ];
+  my ($success, $error_message, $full_buf, $stdout_buf, $stderr_buf)
+    = IPC::Cmd::run(command => $unoconv, verbose => 0);
+
+  if (!$success) {
+    my $error = qq|Error generating PDFs from files ${\$files->join(',')}:$/|
+      . join($/,
+      $error_message,
+      join($/, @$full_buf),
+      join($/, @$stdout_buf),
+      join($/, @$stderr_buf));
+    $self->error($error);
+    $app->log->error($error);
+  }
+  else {
+    $self->success(1);
+  }
+  return $self;
+}
+
+sub _send_file_urls ($self) {
+  return $self unless $self->success;
 
   return $self;
 }

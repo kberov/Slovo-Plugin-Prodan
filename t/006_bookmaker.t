@@ -4,12 +4,19 @@ use Test::More;
 use Test::Mojo;
 use Mojo::File qw(path tempdir);
 use YAML::XS;
+use IPC::Cmd;
+my $BKMKR = 'Slovo::Command::prodan::bookmaker';
+
+unless (IPC::Cmd::can_run('unoconv')) {
+  plan(skip_all => "'unoconv' is needed for $BKMKR to work. "
+      . 'Please install it. Debian and derivatives: sudo apt install unoconv');
+}
 
 BEGIN {
   $ENV{MOJO_CONFIG} = path(__FILE__)->dirname->to_abs->child('slovo.conf');
 };
 note $ENV{MOJO_CONFIG};
-my $install_root = tempdir('slovoXXXX', TMPDIR => 1, CLEANUP => 1);
+my $install_root = tempdir('slovoXXXX', TMPDIR => 1, CLEANUP => 0);
 my $t            = Test::Mojo->with_roles('+Slovo')->install(
 
 # from => to
@@ -27,7 +34,6 @@ my $prepare_products = sub {
   my $command = $PRD->new(app => $app)->run('create', '-f' => 't/products.yaml');
   isa_ok($command => $PRD);
 };
-my $BKMKR = 'Slovo::Command::prodan::bookmaker';
 require_ok($BKMKR);
 my $parse_args = sub {
 
@@ -92,10 +98,24 @@ my $personalize_files = sub {
   ok(($styles_as_string !~ /NAMES_AND_EMAIL/), 'Pattern was replaced with personal data');
 };
 
+my $convert_files = sub {
+
+  my $cmd = $BKMKR->new(app => $app);
+  $cmd->args({
+    files => ['t/book.odt'],
+    skus  => ['9786199169032'],
+    names => Mojo::Util::encode(utf8 => 'Краси Беров'),
+    email => 'berov@cpan.org',
+    to    => 'PDF'
+  })->_find_files->_copy_files->_personalize_files->_files_to_PDF();
+  ok $cmd->success => 'convert suceeded';
+  note 'Password: ' . $cmd->password;
+
+};
 subtest 'Prepare products'    => $prepare_products;
 subtest 'Parse arguments'     => $parse_args;
 subtest 'Find SKUs and Files' => $find_skus_and_files;
 subtest 'Copy files'          => $copy_files;
 subtest 'Personalize files'   => $personalize_files;
-
+subtest 'Convert files'       => $convert_files;
 done_testing;
