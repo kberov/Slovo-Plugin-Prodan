@@ -6,6 +6,7 @@ use Mojo::File qw(path);
 use Mojo::Collection qw(c);
 use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
 use IPC::Cmd qw(can_run);
+use Time::Piece ();
 has args =>
   sub { {skus => [], names => '', files => [], email => '', to => 'PDF', send => 0} };
 has description => 'Generate password protected PDF from ODT';
@@ -44,11 +45,9 @@ sub run ($self, @args) {
   # generate the new PDFs
   $TO_FORMATS{$self->args->{to}}->($self);
 
-  # delete the new ODT files - not needed anymore
-  $self->_delete_personalized_files;
 
-  # optionally send an email or just display the url and password
-  $self->_send_file_urls if $self->args->{send};
+  # optionally send an email or let the caller take care.
+  $self->_send_file_urls if $self->success && $self->args->{send};
   return $self;
 }
 
@@ -65,6 +64,19 @@ sub _parse_args ($self, @args) {
   return $self->args($args);
 }
 
+# Try to find the file in the current directory or under $app->home if the path
+# is not absolute.
+sub _find_file ($self, $file_str) {
+  if (index($file_str, '/', 0) != 0) {
+    if (-f (my $f = $self->app->home->child($file_str)))  { return $f; }
+    if (-f (my $f = path(Cwd::getcwd)->child($file_str))) { return $f; }
+  }
+  elsif (-f $file_str) {
+    return path($file_str);
+  }
+  Carp::croak("$file_str does not exist!");
+}
+
 sub _find_files ($self) {
   my $args = $self->args;
   my $skus
@@ -73,13 +85,12 @@ sub _find_files ($self) {
   my @files;
   for my $pr (@$skus) {
     my $props = from_json $pr->{properties};
-    Carp::croak "$props->{file} does not exist" unless -f $props->{file};
-    push @files, $props->{file};
+    Carp::croak("No `file` property found in SKU $pr->{sku}.") unless $props->{file};
+    push @files, $self->_find_file($props->{file});
   }
 
   for my $f (@{$args->{files}}) {
-    Carp::croak "$f does not exist" unless -f $f;
-    push @files, $f;
+    push @files, $self->_find_file($f);
   }
   return $self->files(c(@files));
 }
@@ -88,11 +99,11 @@ sub _copy_files ($self) {
   my $tmp = $self->tempdir;
   eval { $tmp->make_path({mode => 0711}) } or Carp::croak $@;
 
-  # replace the file-names with the new paths
+  # replace the file-names with the new temporary paths
   my $sufix = $syllables->shuffle->head(2)->join;
   $self->files->each(sub {
-    my ($f) = $_ =~ m|([^/]+)$|;                # filename only
-    $f =~ s/(\.[^.]+)$/-$sufix$1/;              # add the suffix to the basename
+    my ($f) = $_ =~ m|([^/]+)$|;                 # filename only
+    $f =~ s/(\.[^\.]+)$/-$sufix$1/;              # add the suffix to the basename
     $_ = path($_)->copy_to($tmp->child($f));
   });
   return $self;
@@ -109,7 +120,7 @@ sub _personalize_files ($self) {
 
     # replace the pattern with personal info - name and email
     $styles_as_string =~ s /NAMES_AND_EMAIL/$args->{names} &lt;$args->{email}&gt;/g;
-    $odt->contents($styles_file_name, $styles_as_string);
+    $odt->contents($styles_file_name, encode utf8 => $styles_as_string);
     $odt->overwrite();
   }
 
@@ -120,13 +131,14 @@ sub _personalize_files ($self) {
 # https://wiki.openoffice.org/wiki/API/Tutorials/PDF_export
 sub _files_to_PDF ($self) {
   state $app       = $self->app;
-  state $pdf_dir   = $app->home->child('/data/pdf')->to_string;
+  state $pdf_dir   = $app->home->child('/data/pdf');
   state $full_path = can_run('unoconv');
   Carp::croak(
     'unoconv was not found! Please install it first. ',
     'On Debian and derivatives `sudo apt install unoconv`'
   ) unless $full_path;
-  my $output_dir = eval { path("$pdf_dir/out" . time)->make_path({mode => 0711}); }
+  my $output_dir
+    = eval { path("$pdf_dir/_" . Time::Piece->new->ymd)->make_path({mode => 0711}); }
     or Carp::croak $@;
 
   my $files   = $self->files->map(sub { $_->to_string });
@@ -146,7 +158,9 @@ sub _files_to_PDF ($self) {
     '-e' => 'EnableCopyingOfContent=false',
     '-e' => 'EnableTextAccessForAccessibilityTools=false',
     '-f' => 'pdf',
-    '-o' => $output_dir,
+    '-o' => $files->size > 1
+    ? $output_dir
+    : $output_dir->child($files->first =~ m|([^/]+)$|),
     @$files
   ];
   my ($success, $error_message, $full_buf, $stdout_buf, $stderr_buf)
@@ -164,13 +178,31 @@ sub _files_to_PDF ($self) {
   }
   else {
     $self->success(1);
+    $self->files->each(sub {
+      my ($f) = $_ =~ m|([^/]+)$|;    # filename only
+      $f =~ s/odt$/pdf/;
+      $f = path($output_dir)->child($f);
+      if (-f $f) {
+        $_ = $f;
+      }
+      else {
+        my $error = "$f was not produced. Try to debug what unoconv did.";
+        $app->log->error($error);
+        $self->error($self->error . $/ . $error);
+        Carp::croak($error);
+      }
+    });
+    $self->tempdir->remove_tree;
   }
   return $self;
 }
 
 sub _send_file_urls ($self) {
-  return $self unless $self->success;
+  my $mail_cfg = c(@{$self->app->config->{load_plugins}})
+    ->first(sub { ref $_ eq 'HASH' && exists $_->{Prodan} });
+  $mail_cfg = $mail_cfg->{Prodan};
 
+  warn dumper($mail_cfg);
   return $self;
 }
 1;
@@ -221,7 +253,8 @@ file.
 
 =head1 ATTRIBUTES
 
-Slovo::Command::prodan::bookmaker has the following attributes.
+Slovo::Command::prodan::bookmaker has the following attributes. They are
+populated during L</run> and available after L</run> returns.
 
 =head2 args
 
