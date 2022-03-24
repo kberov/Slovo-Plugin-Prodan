@@ -1,12 +1,13 @@
 package Slovo::Command::prodan::bookmaker;
 use Mojo::Base 'Slovo::Command', -signatures;
-use Mojo::Util qw(encode decode getopt dumper);
+use Mojo::Util qw(encode decode getopt dumper b64_encode);
 use Mojo::JSON qw(from_json);
 use Mojo::File qw(path);
 use Mojo::Collection qw(c);
 use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
 use IPC::Cmd qw(can_run);
 use Time::Piece ();
+use Net::SMTP;
 has args =>
   sub { {skus => [], names => '', files => [], email => '', to => 'PDF', send => 0} };
 has description => 'Generate password protected PDF from ODT';
@@ -61,6 +62,10 @@ sub _parse_args ($self, @args) {
     't|to=s'     => \($args->{to}),
     'send'       => \($args->{send});
   $args->{to} = uc $args->{to};
+  @{$args->{files}} + @{$args->{skus}}
+    || Mojo::Exception->throw('Either "skus" or "files" must be provided!');
+  ($args->{names} && $args->{email})
+    || Mojo::Exception->throw('Both "email" and "names" must be provided!');
   return $self->args($args);
 }
 
@@ -197,12 +202,52 @@ sub _files_to_PDF ($self) {
   return $self;
 }
 
-sub _send_file_urls ($self) {
-  my $mail_cfg = c(@{$self->app->config->{load_plugins}})
-    ->first(sub { ref $_ eq 'HASH' && exists $_->{Prodan} });
-  $mail_cfg = $mail_cfg->{Prodan};
 
-  warn dumper($mail_cfg);
+sub _send_file_urls ($self) {
+  state $app    = $self->app;
+  my $config = c(@{$app->config->{load_plugins}})
+    ->first(sub { ref $_ eq 'HASH' && exists $_->{Prodan} });
+  $config = $config->{Prodan}{'Net::SMTP'};
+  warn dumper($config);
+  my $subject = 'Поръчка на книга';
+  my $args    = $self->args;
+  my $body    = <<"BODY";
+Проба алабаланица с турска паница
+BODY
+  my $message = <<"MAIL";
+To: $args->{email}
+From: $config->{mail}
+Subject: =?UTF-8?B?${\ b64_encode(encode('UTF-8', $subject), '') }?=
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+Message-Id: <acc-msg-to-$args->{email}${\ time}>
+Date: ${\ Mojo::Date->new->to_datetime }
+MIME-Version: 1.0
+
+${\ encode('UTF-8', $body)}
+
+MAIL
+
+  my $smtp;
+  $smtp = Net::SMTP->new(%{$config->{new}}) or do {
+    my $error = "Net::SMTP could not instantiate: $@";
+    $app->log->error($error);
+    Mojo::Exception->throw($error);
+  };
+  $smtp->auth(@{$config->{auth}});
+  $smtp->mail($config->{mail});
+
+  if ($smtp->to($args->{email})) {
+    $smtp->data;
+    $smtp->datasend($message);
+    $smtp->dataend();
+  }
+  else {
+    $app->log->error('Net::SMTP Error: ' . $smtp->message());
+    $app->log->error('This affects the sending of book(s) to: ' . $args->{names});
+  }
+
+  $smtp->quit;
   return $self;
 }
 1;

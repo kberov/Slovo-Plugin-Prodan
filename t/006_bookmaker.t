@@ -77,7 +77,7 @@ my $copy_files = sub {
   $cmd->args({files => ['t/book.odt'], skus => ['9786199169032']})
     ->_find_files->_copy_files;
   $cmd->files->each(sub {
-    like $_=> qr|books\w+/.+?-[A-Z1-9]{6}.odt|, $_ . ' copied with random suffix';
+    like $_=> qr|books\w+/.+?-[A-Z1-9]{4}.odt|, 'File copied with random suffix';
     ok(-f $_, 'file exists');
   });
 
@@ -107,15 +107,44 @@ my $convert_files = sub {
     names => Mojo::Util::encode(utf8 => 'Краси Беров'),
     email => 'berov@cpan.org',
     to    => 'PDF'
-  })->_find_files->_copy_files->_personalize_files->_files_to_PDF();
-  ok $cmd->success => 'convert suceeded';
-  note 'Password: ' . $cmd->password;
+  })->_find_files;
+  my $found_files = $cmd->files->size;
+  $cmd->_copy_files->_personalize_files->_files_to_PDF();
 
+  ok $cmd->success => 'convert suceeded';
+  note explain $cmd->files;
+  is $cmd->files->size => $found_files, "$found_files file(s) produced";
+  $cmd->files->each(sub { like $_ => qr/\.pdf$/i, "file is a PDF file" });
+  ok(!-d $cmd->tempdir, $cmd->tempdir . ' was removed with files in it.');
+  note 'Password: ' . $cmd->password;
 };
-subtest 'Prepare products'    => $prepare_products;
-subtest 'Parse arguments'     => $parse_args;
-subtest 'Find SKUs and Files' => $find_skus_and_files;
-subtest 'Copy files'          => $copy_files;
-subtest 'Personalize files'   => $personalize_files;
-subtest 'Convert files'       => $convert_files;
+
+my $send_files_urls = sub {
+SKIP: {
+    skip
+      'Please set SLOVO_PRODAN_MAIL_HOST,SLOVO_PRODAN_MAIL_FROM and SLOVO_PRODAN_MAIL_PASSW!'
+      unless ($ENV{SLOVO_PRODAN_MAIL_HOST}
+      && $ENV{SLOVO_PRODAN_MAIL_FROM}
+      && $ENV{SLOVO_PRODAN_MAIL_PASSW});
+
+    my $cmd = $BKMKR->new(app => $app);
+    $cmd->run(
+      '-f' => 't/book.odt',
+      '-s' => '9786199169032',
+      '-n' => 'Краси Беров',
+      '-e' => 'berov@cpan.org',
+      '--send'
+    );
+    ok(1, 'ok');
+  }
+};
+
+#subtest 'Prepare products'    => $prepare_products;
+#subtest 'Parse arguments'     => $parse_args;
+#subtest 'Find SKUs and Files' => $find_skus_and_files;
+#subtest 'Copy files'          => $copy_files;
+subtest 'Personalize files' => $personalize_files;
+subtest 'Convert files'     => $convert_files;
+subtest 'Send files\' urls' => $send_files_urls;
+
 done_testing;
