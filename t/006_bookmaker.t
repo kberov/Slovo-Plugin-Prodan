@@ -139,7 +139,8 @@ SKIP: {
   }
 };
 
-#subtest 'Prepare products'    => $prepare_products;
+subtest 'Prepare products' => $prepare_products;
+
 #subtest 'Parse arguments'     => $parse_args;
 #subtest 'Find SKUs and Files' => $find_skus_and_files;
 #subtest 'Copy files'          => $copy_files;

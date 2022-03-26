@@ -1,5 +1,6 @@
 package Slovo::Command::prodan::bookmaker;
 use Mojo::Base 'Slovo::Command', -signatures;
+use feature qw(lexical_subs);
 use Mojo::Util qw(encode decode getopt dumper b64_encode);
 use Mojo::JSON qw(from_json);
 use Mojo::File qw(path);
@@ -8,25 +9,36 @@ use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
 use IPC::Cmd qw(can_run);
 use Time::Piece ();
 use Net::SMTP;
-has args =>
-  sub { {skus => [], names => '', files => [], email => '', to => 'PDF', send => 0} };
-has description => 'Generate password protected PDF from ODT';
-has error       => '';
-has usage       => sub { shift->extract_usage };
-has files       => sub { c() };
-has success     => 0;
-has tempdir     => sub {
+
+has args => sub { {
+  skus    => [],
+  names   => '',
+  files   => [],
+  email   => '',
+  to      => 'PDF',
+  send    => 0,
+  quiet   => 0,
+  dom_url => '',
+} };
+has books_base_url => '/books';
+has description    => 'Generate password protected PDF from ODT';
+has error          => '';
+has usage          => sub { shift->extract_usage };
+has files          => sub { c() };
+has success        => 0;
+has tempdir        => sub {
   Mojo::File::tempdir('booksXXXX', TMPDIR => 1, CLEANUP => 0);
 };
 
 my %TO_FORMATS = (PDF => \&_files_to_PDF,);
 my @vowels     = qw(A Y E I O U);
-my @all        = ('A' .. 'Z', 1 .. 9);
+my @all        = ('A' .. 'Z', 1 .. 9, qw(_ - $));
 my $count      = scalar @vowels;
 my $syllables  = c(@all)->shuffle->map(sub { $_ . $vowels[int rand($count)] });
 
 has password => sub {
-  $syllables->shuffle->head(5)->join;
+  my $i = rand $syllables->size - 4;
+  join('', @$syllables[$i .. $i + 4]);
 };
 
 sub run ($self, @args) {
@@ -52,20 +64,57 @@ sub run ($self, @args) {
   return $self;
 }
 
+#say something or return what would be already said
+sub _say ($self, $say) {
+  push @{$self->{_says} //= []}, $say if $say;
+  if (!$self->args->{quiet} && $say) {
+    say $say;
+    return;
+  }
+  return $self->{_says} unless $say;
+  return;
+}
+
+
+# parse and validate arguments
 sub _parse_args ($self, @args) {
+  # When running as CGI or service we do not get much parameters and the
+  # arguments of this command will be already decoded. When run on the command
+  # line, we get all parameters already UTF8 encoded and must decode some of
+  # them.
+  if(@ARGV>2) { 
+    c(@args)->each(sub{$_= decode(utf8=>$_)});
+  }
   my $args = $self->args;
   getopt \@args,
-    's|skus=s@'  => \($args->{skus}),
-    'n|names=s'  => \($args->{names}),
-    'e|email=s'  => \($args->{email}),
-    'f|files=s@' => \($args->{files}),
-    't|to=s'     => \($args->{to}),
-    'send'       => \($args->{send});
+    'e|email=s'   => \($args->{email}),
+    'd|dom_url=s' => \($args->{dom_url}),
+    'f|file=s@'   => \($args->{files}),
+    'q|quiet'     => \($args->{quiet}),
+    'n|names=s'   => \($args->{names}),
+    's|sku=s@'    => \($args->{skus}),
+    'send'        => \($args->{send}),
+    't|to=s'      => \($args->{to});
+
   $args->{to} = uc $args->{to};
-  @{$args->{files}} + @{$args->{skus}}
-    || Mojo::Exception->throw('Either "skus" or "files" must be provided!');
-  ($args->{names} && $args->{email})
-    || Mojo::Exception->throw('Both "email" and "names" must be provided!');
+  # We need at least one file to convert something.
+  unless(@{$args->{files}} + @{$args->{skus}}){
+    $self->_say($self->usage);
+    Mojo::Exception->throw('Either "sku" or "file" must be provided!');
+  }
+
+  # Needed for the footer
+  unless ($args->{names} && $args->{email}) {
+    $self->_say($self->usage);
+    Mojo::Exception->throw('Both "email" and "names" must be provided!');
+  }
+  # If the files' urls will be send via email, we need the domain to construsct
+  # the download URLs.
+  if($args->{send} && !$args->{dom_url}) {
+    $self->_say($self->usage);
+    Mojo::Exception->throw('"dom_url" is mandatory if the --send option is set.');
+  }
+
   return $self->args($args);
 }
 
@@ -90,7 +139,7 @@ sub _find_files ($self) {
   my @files;
   for my $pr (@$skus) {
     my $props = from_json $pr->{properties};
-    Carp::croak("No `file` property found in SKU $pr->{sku}.") unless $props->{file};
+    Mojo::Exception->throw("No `file` property found in SKU $pr->{sku}.") unless $props->{file};
     push @files, $self->_find_file($props->{file});
   }
 
@@ -102,7 +151,7 @@ sub _find_files ($self) {
 
 sub _copy_files ($self) {
   my $tmp = $self->tempdir;
-  eval { $tmp->make_path({mode => 0711}) } or Carp::croak $@;
+  eval { $tmp->make_path({mode => oct(711)}) } or Mojo::Exception->throw($@);
 
   # replace the file-names with the new temporary paths
   my $sufix = $syllables->shuffle->head(2)->join;
@@ -127,6 +176,7 @@ sub _personalize_files ($self) {
     $styles_as_string =~ s /NAMES_AND_EMAIL/$args->{names} &lt;$args->{email}&gt;/g;
     $odt->contents($styles_file_name, encode utf8 => $styles_as_string);
     $odt->overwrite();
+    $self->_say("Personalized $f.")
   }
 
   return $self;
@@ -138,13 +188,13 @@ sub _files_to_PDF ($self) {
   state $app       = $self->app;
   state $pdf_dir   = $app->home->child('/data/pdf');
   state $full_path = can_run('unoconv');
-  Carp::croak(
+  Mojo::Exception->throw(
     'unoconv was not found! Please install it first. ',
     'On Debian and derivatives `sudo apt install unoconv`'
   ) unless $full_path;
   my $output_dir
-    = eval { path("$pdf_dir/_" . Time::Piece->new->ymd)->make_path({mode => 0711}); }
-    or Carp::croak $@;
+    = eval { path("$pdf_dir/_" . Time::Piece->new->ymd)->make_path({mode => oct(711)}); }
+    or Mojo::Exception->throw($@);
 
   my $files   = $self->files->map(sub { $_->to_string });
   my $unoconv = [
@@ -189,12 +239,13 @@ sub _files_to_PDF ($self) {
       $f = path($output_dir)->child($f);
       if (-f $f) {
         $_ = $f;
+        $self->_say(qq|Produced file $f with password "${\ $self->password }".|)
       }
       else {
         my $error = "$f was not produced. Try to debug what unoconv did.";
         $app->log->error($error);
         $self->error($self->error . $/ . $error);
-        Carp::croak($error);
+        Mojo::Exception->throw($error);
       }
     });
     $self->tempdir->remove_tree;
@@ -202,34 +253,61 @@ sub _files_to_PDF ($self) {
   return $self;
 }
 
+my sub _subject {
+  return
+      'Поръчка на книг'
+    . ($_[0]->files->size > 1 ? 'и' : 'а')
+    . '. ISBN: '
+    . (join ',', @{$_[0]->args->{skus} // []});
+}
+
+my sub _body ($self) {
+  state $one  = {ebook => 'електронна книга', _link => 'връзка', it => 'ѝ',};
+  state $many = {ebook => 'електронни книги', _link => 'връзки', it => 'им',};
+  my $words = $self->files->size > 1 ? $many : $one;
+  my $links = $self->files->map(sub {
+    my ($f) = $_ =~ m|(/[\w-]+/[^/]+)$|;
+    my $url= $self->args->{dom_url} . $self->books_base_url . $f;
+    $self->_say("Prepared download URL: $url");
+    return $url;
+  });
+  return <<"BODY";
+Здравейте, ${\ $self->args->{names} }.
+Получавате това писмо, защото поръчахте $words->{ebook} в слово.бг.
+Ето $words->{_link} за изтеглянето $words->{it}.
+
+${\ $links->join($/) }
+
+С балгодарност,
+Студио Беров
+BODY
+
+}
 
 sub _send_file_urls ($self) {
-  state $app    = $self->app;
+  state $app = $self->app;
   my $config = c(@{$app->config->{load_plugins}})
     ->first(sub { ref $_ eq 'HASH' && exists $_->{Prodan} });
   $config = $config->{Prodan}{'Net::SMTP'};
-  warn dumper($config);
-  my $subject = 'Поръчка на книга';
-  my $args    = $self->args;
-  my $body    = <<"BODY";
+  my $args = $self->args;
+  my $body = <<"BODY";
 Проба алабаланица с турска паница
 BODY
   my $message = <<"MAIL";
 To: $args->{email}
 From: $config->{mail}
-Subject: =?UTF-8?B?${\ b64_encode(encode('UTF-8', $subject), '') }?=
+Subject: =?UTF-8?B?${\ b64_encode(encode('UTF-8', _subject($self)), '') }?=
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 8bit
 Message-Id: <acc-msg-to-$args->{email}${\ time}>
 Date: ${\ Mojo::Date->new->to_datetime }
 MIME-Version: 1.0
 
-${\ encode('UTF-8', $body)}
+${\ encode('UTF-8' => _body($self))}
 
 MAIL
 
-  my $smtp;
-  $smtp = Net::SMTP->new(%{$config->{new}}) or do {
+  my $smtp = Net::SMTP->new(%{$config->{new}}) or do {
     my $error = "Net::SMTP could not instantiate: $@";
     $app->log->error($error);
     Mojo::Exception->throw($error);
@@ -241,6 +319,7 @@ MAIL
     $smtp->data;
     $smtp->datasend($message);
     $smtp->dataend();
+    $self->_say("Message with download urls sent to $args->{email}.");
   }
   else {
     $app->log->error('Net::SMTP Error: ' . $smtp->message());
@@ -266,28 +345,34 @@ Slovo::Command::prodan::bookmaker - generate password protected PDF from ODT.
     slovo prodan bookmaker --sku 9786199169025 --names 'Краси Беров' --email berov@cpan.org
     slovo prodan bookmaker --sku 9786199169025 --names 'Краси Беров' --email berov@cpan.org --to PDF
     slovo prodan bookmaker --file book1.odt --file book2.odt --to PDF
+    slovo prodan bookmaker --sku 9786199169032 --sku 9786199169018 dom_url https://example.com -send
 
   Options:
-    -h, --help  Show this summary of available options
-    -s, --skus  Unique identifiers of the books in the products table. Can be many.
-    -n, --names Names of the person for which to prepare the files.
-    -e, --email Email to which to send download links.
-    -f, --files Source Filename which to copy, modify and convert. Can be many.
-    -t, --to    Format to which to convert the ODT file. For now only PDF.
-                Defaults to PDF.
-        --send  Boolean. Send the urls to files via email on the provided email.
+    -e, --email   Email to which to send download links. Mandatory
+    -d, --dom_url URL of the domain from which the download links will be
+                  downloaded. Mandatory if the --send option is set.
+    -f, --file    Source Filename which to copy, modify and convert. Can be many.
+    -q, --quiet   Do not print to STDOUT what is being done.
+    -n, --names   Names of the person for which to prepare the files. Mandatory
+    -s, --sku     Unique identifiers of the books in the products table. Can be many.
+        --send    Should an email with download links be send to the provided email?
+    -t, --to      Format to which to convert the ODT file. For now only PDF.
+                  Defaults to PDF.
+        --send    Boolean. Send the urls to files via email to the provided email address.
+
 
 =head1 DESCRIPTION
 
 Slovo::Command::prodan::bookmaker is a command that converts a list of ODT
-files, found in the properties of the products table to PDF by using
-LibreOffice in headless mode. Given the arguments C<--names> and C<--email>, it
-adds this information to the footer of each page in the prepared books. A
-password is set for the created books. To the name of the newly created PDFs
-the first part of the email is appended. The file-names of the newly created PDFs and
-the password are printed on the command-line. Additionally they are availble in
-the attributes L</files> and L</password> of the command object. This is for
-cases when the command is not run on the command line.
+files, found in the properties of the products table or passed on the command
+line to PDF by using LibreOffice in headless mode. Given the arguments
+C<--names> and C<--email>, it adds this information to the footer of each page
+in the prepared books. A password is set for the created books. To the name of
+the newly created PDFs the first part of the email is appended. The file-names
+of the newly created PDFs and the password are printed on the command-line.
+Additionally they are availble in the attributes L</files> and L</password> of
+the command object. This is for cases when the command is not run on the
+command line.
 
 Finaly the command may send an email message to the given email that the books
 are ready. The message will contain links to the prepared PDF files to be
@@ -313,11 +398,25 @@ Parsed arguments right after L</run> is invoked.
     });
     my $args = $self->args;
 
+=head2 books_base_url
+
+Base url of the books to be downloaded. It will be prepended to theparent
+forlder of the files. It is expected tha the inovker of this command (command
+line or a controller) provides a base url with a domain name.
+
+    $cmd = $cmd->books_base_url('https://слово.бг');
+    my $url = $cmd->books_base_url;
+
 =head2 description
 
 Description of the command - string.
 
     my $descr = $bookmaker->description;
+
+=head2 error
+
+A string containg newline separated error mesages, collected during run.
+
 
 =head2 files
 
@@ -331,6 +430,14 @@ Mojo::Collection of paths to the prepared files.
 Password for opening the prepared PDFs.
 
     $bookmaker->password;
+
+=head2 success
+
+    Bolean, indicating if the command finished successfuly or not.
+
+=head2 tempdir
+
+Atemporary directory under C</tmp>
 
 =head2 usage
 
