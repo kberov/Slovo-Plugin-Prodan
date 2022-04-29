@@ -32,7 +32,7 @@ has tempdir        => sub {
 
 my %TO_FORMATS = (PDF => \&_files_to_PDF,);
 my @vowels     = qw(A Y E I O U);
-my @all        = ('A' .. 'Z', 1 .. 9, qw(_ - $));
+my @all        = ('A' .. 'Z', 1 .. 9, qw(_));
 my $count      = scalar @vowels;
 my $syllables  = c(@all)->shuffle->map(sub { $_ . $vowels[int rand($count)] });
 
@@ -42,7 +42,6 @@ has password => sub {
 };
 
 sub run ($self, @args) {
-
   # read and validate arguments
   $self->_parse_args(@args);
 
@@ -78,13 +77,6 @@ sub _say ($self, $say) {
 
 # parse and validate arguments
 sub _parse_args ($self, @args) {
-  # When running as CGI or service we do not get much parameters and the
-  # arguments of this command will be already decoded. When run on the command
-  # line, we get all parameters already UTF8 encoded and must decode some of
-  # them.
-  if(@ARGV>2) { 
-    c(@args)->each(sub{$_= decode(utf8=>$_)});
-  }
   my $args = $self->args;
   getopt \@args,
     'e|email=s'   => \($args->{email}),
@@ -115,6 +107,16 @@ sub _parse_args ($self, @args) {
     Mojo::Exception->throw('"dom_url" is mandatory if the --send option is set.');
   }
 
+  # When running as CGI or service we do not get much parameters and the
+  # arguments of this command will be already decoded. When run on the command
+  # line, we get all parameters already UTF8 encoded and must decode some of
+  # them.
+  warn dumper $args;
+  if((@ARGV - 2) == @args) { 
+    $args->{names} = decode(UTF8 => $args->{names});
+    $args->{dom_url} = decode(UTF8 => $args->{dom_url});
+  }
+  warn dumper $args;
   return $self->args($args);
 }
 
@@ -174,7 +176,7 @@ sub _personalize_files ($self) {
 
     # replace the pattern with personal info - name and email
     $styles_as_string =~ s /NAMES_AND_EMAIL/$args->{names} &lt;$args->{email}&gt;/g;
-    $odt->contents($styles_file_name, encode utf8 => $styles_as_string);
+    $odt->contents($styles_file_name, $styles_as_string);
     $odt->overwrite();
     $self->_say("Personalized $f.")
   }
