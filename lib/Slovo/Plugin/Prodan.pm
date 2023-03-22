@@ -4,7 +4,7 @@ use Mojo::Base 'Mojolicious::Plugin', -signatures;
 use Mojo::JSON qw(true false);
 
 our $AUTHORITY = 'cpan:BEROV';
-our $VERSION   = '0.05';
+our $VERSION   = '0.06';
 
 has app => sub { Slovo->new }, weak => 1;
 
@@ -74,7 +74,9 @@ sub _paths {
             schema      => {'$ref' => '#/definitions/Poruchka'}
 
           },
-          default => {'$ref' => '#/definitions/ErrorResponse'}}}
+          default => {
+            description => 'Default ErrorResponse',
+            schema      => {'$ref' => '#/definitions/ErrorResponse'}}}}
     },
 
     '/poruchka/:deliverer/:deliverer_id' => {
@@ -114,13 +116,18 @@ sub _paths {
             schema => {'$ref' => '#/definitions/Poruchka'}
 
           },
-          default => {'$ref' => '#/definitions/ErrorResponse'}}}
+          default => {
+            description => 'Default ErrorResponse',
+            schema      => {'$ref' => '#/definitions/ErrorResponse'}}}}
     },
     '/shop' => {
       get => {
         description => 'Provides data for the shop',
         'x-mojo-to' => 'poruchki#shop',
-        responses   => {default => {'$ref' => '#/definitions/ErrorResponse'}}}
+        responses   => {
+          default => {
+            description => 'Default ErrorResponse',
+            schema      => {'$ref' => '#/definitions/ErrorResponse'}}}}
     },
     '/consents' => {
       get => {
@@ -131,7 +138,9 @@ sub _paths {
             description => 'The URL to the detailed usage conditions, GDPR, cookies.',
             schema      => {'$ref' => '#/definitions/Consents'}
           },
-          default => {'$ref' => '#/definitions/ErrorResponse'}}}
+          default => {
+            description => 'Default ErrorResponse',
+            schema      => {'$ref' => '#/definitions/ErrorResponse'}}}}
     },
   );
 }
@@ -325,13 +334,13 @@ the product data. For example:
     <button class="primary sharer button add-to-cart"
         title="книжно издание" data-sku="9786199169001" 
         data-title="Житие на света Петка Българска от свети патриарх Евтимий"
-        data-weight="0.5" data-price="7.00"><img
+        data-weight="0.05" data-price="7.00"><img
         src="/css/malka/book-open-page-variant-outline.svg">
         <img src="/img/cart-plus-white.svg"></button>
 
 See "A template..." below.
 
-=head2 Delivery of sold goods
+=head2 Delivery of ordered goods
 
 A "Pay on delivery" integration with Bulgarian currier L<Econt (in
 Bulgarian)|https://www.econt.com/developers/43-kakvo-e-dostavi-s-ekont.html>.
@@ -1602,7 +1611,7 @@ my $variants = $books->all({
   $_->{properties} = Mojo::JSON::from_json($_->{properties});
 });
 return unless @$variants;
-# $c->debug(' $variants' => $variants);
+ $c->debug(' $variants' => $variants);
 %>
 <!-- _book -->
 <!-- <%= $domain->{templates} %> -->
@@ -1615,7 +1624,7 @@ return unless @$variants;
     <figure class="col-3 text-center">
         <img title="<%= $variants->[0]{title} %>" src="<%= $variants->[0]{properties}{images}[0] %>">
         <figcaption class="text-center">
-        %= $variants->first(sub {$_->{properties}{in_store}}) ? 'За покупка' : 'Изчерпана';
+        %= $variants->first(sub {$_->{properties}{in_store}}) ? 'За заявка' : 'Изчерпана';
         <br />
         % for my $b(@$variants) {
         % my $props = $b->{properties}; next unless $props->{in_store};

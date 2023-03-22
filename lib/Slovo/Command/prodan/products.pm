@@ -3,6 +3,12 @@ use Mojo::Base 'Slovo::Command', -signatures;
 use Mojo::Util qw(encode decode getopt dumper);
 use YAML::XS qw(Dump DumpFile LoadFile Load);
 use Mojo::JSON qw(to_json);
+
+BEGIN {
+  binmode STDOUT => ':encoding(UTF8)';
+  binmode STDERR => ':encoding(UTF8)';
+}
+
 has description => 'Manage products on the command line';
 
 has usage   => sub { shift->extract_usage };
@@ -20,10 +26,10 @@ sub run ($self, @args) {
       . $self->usage)
     && return;
   getopt \@args,
-    'f|file=s'  => \(my $file  = ''),
-    'w|where=s' => \(my $where = ''),
-    'l|limit=i' => \(my $limit = 100),
-    'o|ofset=i' => \(my $ofset = 0);
+    'f|from_file=s' => \(my $file  = ''),
+    'w|where=s'     => \(my $where = ''),
+    'l|limit=i'     => \(my $limit = 100),
+    'o|ofset=i'     => \(my $ofset = 0);
   my $file_actions  = join('|', @{$self->actions}[0 .. 2]);
   my $where_actions = join('|', @{$self->actions}[3 .. 4]);
   if ($action =~ /$file_actions/) {
@@ -55,7 +61,7 @@ sub _create ($self, $file) {
   # INSERT
   for (@$products) {
     do {
-      say encode utf8 => "Inserting $_->{alias}, $_->{sku}";
+      say "Inserting $_->{alias}, $_->{sku}";
       $db->insert(
         'products' => {
           alias  => $_->{alias},
@@ -113,8 +119,8 @@ Slovo::Command::prodan::products - manage products on the command line
 =head1 SYNOPSIS
 
   Usage:
-    slovo prodan products create --from ./products.yaml
-    slovo prodan products update --from ./products.yaml
+    slovo prodan products create --from_file ./products.yaml
+    slovo prodan products update --from_file ./products.yaml
     slovo prodan products list   --where "alias like'%лечителката%'"
     slovo prodan products delete --where "alias like'%лечителката%'"
 
