@@ -55,6 +55,7 @@
 ^slovo.conf
 ^slovo.+\.conf
 ^.+\.cgi
+t\/tmp_book
 
 # Avoid OS-specific files/dirs
 # Mac OSX metadata

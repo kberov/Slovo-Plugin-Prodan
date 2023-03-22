@@ -100,23 +100,24 @@ sub _parse_args ($self, @args) {
     $self->_say($self->usage);
     Mojo::Exception->throw('Both "email" and "names" must be provided!');
   }
-  # If the files' urls will be send via email, we need the domain to construsct
+  # If the files' urls will be send via email, we need the domain to construct
   # the download URLs.
   if($args->{send} && !$args->{dom_url}) {
     $self->_say($self->usage);
-    Mojo::Exception->throw('"dom_url" is mandatory if the --send option is set.');
+    Mojo::Exception->throw('Argument --dom_url is mandatory if the --send option is set!');
   }
 
   # When running as CGI or service we do not get much parameters and the
   # arguments of this command will be already decoded. When run on the command
   # line, we get all parameters already UTF8 encoded and must decode some of
   # them.
-  warn dumper $args;
+  state $log = $self->app->log;
+  $log->debug( args => $args);
   if((@ARGV - 2) == @args) { 
     $args->{names} = decode(UTF8 => $args->{names});
     $args->{dom_url} = decode(UTF8 => $args->{dom_url});
   }
-  warn dumper $args;
+  $log->debug( args => $args);
   return $self->args($args);
 }
 
@@ -139,9 +140,9 @@ sub _find_files ($self) {
     = $self->app->dbx->db->select('products', '*', {sku => {-in => $args->{skus} // []}})
     ->hashes;
   my @files;
-  for my $pr (@$skus) {
-    my $props = from_json $pr->{properties};
-    Mojo::Exception->throw("No `file` property found in SKU $pr->{sku}.") unless $props->{file};
+  for my $product (@$skus) {
+    my $props = from_json $product->{properties};
+    Mojo::Exception->throw("No `file` property found in SKU $product->{sku}.") unless $props->{file};
     push @files, $self->_find_file($props->{file});
   }
 
@@ -252,6 +253,7 @@ sub _files_to_PDF ($self) {
     });
     $self->tempdir->remove_tree;
   }
+  $app->log->debug('File converted to PDF');
   return $self;
 }
 
@@ -347,7 +349,7 @@ Slovo::Command::prodan::bookmaker - generate password protected PDF from ODT.
     slovo prodan bookmaker --sku 9786199169025 --names 'Краси Беров' --email berov@cpan.org
     slovo prodan bookmaker --sku 9786199169025 --names 'Краси Беров' --email berov@cpan.org --to PDF
     slovo prodan bookmaker --file book1.odt --file book2.odt --to PDF
-    slovo prodan bookmaker --sku 9786199169032 --sku 9786199169018 dom_url https://example.com -send
+    slovo prodan bookmaker --sku 9786199169032 --sku 9786199169018 --dom_url https://example.com -send
 
   Options:
     -e, --email   Email to which to send download links. Mandatory
@@ -367,21 +369,22 @@ Slovo::Command::prodan::bookmaker - generate password protected PDF from ODT.
 
 Slovo::Command::prodan::bookmaker is a command that converts a list of ODT
 files, found in the properties of the products table or passed on the command
-line to PDF by using LibreOffice in headless mode. Given the arguments
-C<--names> and C<--email>, it adds this information to the footer of each page
-in the prepared books. A password is set for the created books. To the name of
-the newly created PDFs the first part of the email is appended. The file-names
-of the newly created PDFs and the password are printed on the command-line.
-Additionally they are availble in the attributes L</files> and L</password> of
-the command object. This is for cases when the command is not run on the
-command line.
+line to a PDF document by using LibreOffice (via unoconv) in headless mode.
+Given the arguments C<--names> and C<--email>, it adds this information to the
+footer of each page in the prepared books. A password is set for the created
+books. To the name of the newly created PDFs the first part of the email is
+appended. The file-names of the newly created PDFs and the password for opening
+the produced PDFs are printed on the command-line.  Additionally they are
+availble in the attributes L</files> and L</password> of the command object.
+This is for cases when the command is not run on the command line but from a
+controller maybe.
 
 Finaly the command may send an email message to the given email that the books
-are ready. The message will contain links to the prepared PDF files to be
-downloaded by the owner of the email.
+are ready for download. The message will contain links to the prepared PDF
+files to be downloaded by the owner of the email.
 
-The command also can create such password protected PDF from any given ODT
-file.
+The command also can create such password protected PDF from any given path to
+an ODT file.
 
 =head1 ATTRIBUTES
 

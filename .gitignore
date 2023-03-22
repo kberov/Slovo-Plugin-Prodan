@@ -45,7 +45,7 @@ _Deparsed_XSubs.pm
 /domove/
 /data
 /*.conf
-
+t/tmp_book
 # Locally installed Perl modules
 /local
 

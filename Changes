@@ -1,7 +1,7 @@
 Revision history for Slovo plugin Slovo::Plugin::Prodan
 
-0.06 Implemented subcommand `products list`.
-     Fixed failing tests.
+0.06 Implemented subcommand `products list`. Fixed failing tests.
+     Implementing Slovo::Command::prodan::bookmaker - BETA.
 
 
 0.05 Reorganised 'gdpr_consent' into 'consents' configuration section.

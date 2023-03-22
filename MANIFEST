@@ -2,6 +2,7 @@
 .perltidyrc
 Changes
 lib/Slovo/Command/prodan.pm
+lib/Slovo/Command/prodan/bookmaker.pm
 lib/Slovo/Command/prodan/products.pm
 lib/Slovo/Controller/Poruchki.pm
 lib/Slovo/Model/Poruchki.pm
@@ -15,6 +16,9 @@ t/002_products.t
 t/003_cart.t
 t/004_gdpr_consent.t
 t/005_footer_right.t
+t/006_bookmaker.t
+t/book.odt
+t/lechitelkata.odt
 t/manifest.t
 t/perl-critic.t
 t/perltidy.t
