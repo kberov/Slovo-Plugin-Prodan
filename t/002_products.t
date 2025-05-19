@@ -1,4 +1,4 @@
-# t/002_products.t - create some products read on the site, update them and again rad them
+# t/002_products.t - create some products read on the site, update them and again read them
 use Mojo::Base -strict;
 use Test::More;
 use Test::Mojo;
@@ -186,6 +186,9 @@ my $product_command = sub {
       = $t->get_ok("/книги/$_->{alias}.bg.html")->status_is(200)->element_exists('h1')
       ->text_like('table#meta tr:first-child th' => qr/^Заглавие/)
       ->text_is('table#meta tr:first-child td' => $_->{title} => 'right title')
+
+      # og:image
+      ->attr_like('meta[property="og:image"]', 'content' => qr{/img/})
 
       # get the price
       ->text_like('table#meta tr.price td' => qr/$_->{properties}{price} лв. за/ =>

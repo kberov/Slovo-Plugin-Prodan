@@ -1,13 +1,13 @@
 package Slovo::Command::prodan::bookmaker;
 use Mojo::Base 'Slovo::Command', -signatures;
-use feature qw(lexical_subs);
-use Mojo::Util qw(encode decode getopt dumper b64_encode);
-use Mojo::JSON qw(from_json);
-use Mojo::File qw(path);
+use feature          qw(lexical_subs);
+use Mojo::Util       qw(encode decode getopt dumper b64_encode);
+use Mojo::JSON       qw(from_json);
+use Mojo::File       qw(path);
 use Mojo::Collection qw(c);
-use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
-use IPC::Cmd qw(can_run);
-use Time::Piece ();
+use Archive::Zip     qw( :ERROR_CODES :CONSTANTS );
+use IPC::Cmd         qw(can_run);
+use Time::Piece      ();
 use Net::SMTP;
 
 has args => sub { {
@@ -42,6 +42,7 @@ has password => sub {
 };
 
 sub run ($self, @args) {
+
   # read and validate arguments
   $self->_parse_args(@args);
 
@@ -52,7 +53,7 @@ sub run ($self, @args) {
   $self->_copy_files;
 
   # modify the style file footer for each file
-  $self->_personalize_files;
+  #$self->_personalize_files;
 
   # generate the new PDFs
   $TO_FORMATS{$self->args->{to}}->($self);
@@ -89,8 +90,9 @@ sub _parse_args ($self, @args) {
     't|to=s'      => \($args->{to});
 
   $args->{to} = uc $args->{to};
+
   # We need at least one file to convert something.
-  unless(@{$args->{files}} + @{$args->{skus}}){
+  unless (@{$args->{files}} + @{$args->{skus}}) {
     $self->_say($self->usage);
     Mojo::Exception->throw('Either "sku" or "file" must be provided!');
   }
@@ -100,11 +102,13 @@ sub _parse_args ($self, @args) {
     $self->_say($self->usage);
     Mojo::Exception->throw('Both "email" and "names" must be provided!');
   }
+
   # If the files' urls will be send via email, we need the domain to construct
   # the download URLs.
-  if($args->{send} && !$args->{dom_url}) {
+  if ($args->{send} && !$args->{dom_url}) {
     $self->_say($self->usage);
-    Mojo::Exception->throw('Argument --dom_url is mandatory if the --send option is set!');
+    Mojo::Exception->throw(
+      'Argument --dom_url is mandatory if the --send option is set!');
   }
 
   # When running as CGI or service we do not get much parameters and the
@@ -112,12 +116,12 @@ sub _parse_args ($self, @args) {
   # line, we get all parameters already UTF8 encoded and must decode some of
   # them.
   state $log = $self->app->log;
-  $log->debug( args => $args);
-  if((@ARGV - 2) == @args) { 
-    $args->{names} = decode(UTF8 => $args->{names});
+  $log->debug(args => $args);
+  if ((@ARGV - 2) == @args) {
+    $args->{names}   = decode(UTF8 => $args->{names});
     $args->{dom_url} = decode(UTF8 => $args->{dom_url});
   }
-  $log->debug( args => $args);
+  $log->debug(args => $args);
   return $self->args($args);
 }
 
@@ -142,7 +146,8 @@ sub _find_files ($self) {
   my @files;
   for my $product (@$skus) {
     my $props = from_json $product->{properties};
-    Mojo::Exception->throw("No `file` property found in SKU $product->{sku}.") unless $props->{file};
+    Mojo::Exception->throw("No `file` property found in SKU $product->{sku}.")
+      unless $props->{file};
     push @files, $self->_find_file($props->{file});
   }
 
@@ -159,8 +164,8 @@ sub _copy_files ($self) {
   # replace the file-names with the new temporary paths
   my $sufix = $syllables->shuffle->head(2)->join;
   $self->files->each(sub {
-    my ($f) = $_ =~ m|([^/]+)$|;                 # filename only
-    $f =~ s/(\.[^\.]+)$/-$sufix$1/;              # add the suffix to the basename
+    my ($f) = $_ =~ m|([^/]+)$|;       # filename only
+    $f =~ s/(\.[^\.]+)$/-$sufix$1/;    # add the suffix to the basename
     $_ = path($_)->copy_to($tmp->child($f));
   });
   return $self;
@@ -179,7 +184,7 @@ sub _personalize_files ($self) {
     $styles_as_string =~ s /NAMES_AND_EMAIL/$args->{names} &lt;$args->{email}&gt;/g;
     $odt->contents($styles_file_name, $styles_as_string);
     $odt->overwrite();
-    $self->_say("Personalized $f.")
+    $self->_say("Personalized $f.");
   }
 
   return $self;
@@ -242,7 +247,7 @@ sub _files_to_PDF ($self) {
       $f = path($output_dir)->child($f);
       if (-f $f) {
         $_ = $f;
-        $self->_say(qq|Produced file $f with password "${\ $self->password }".|)
+        $self->_say(qq|Produced file $f with password "${\ $self->password }".|);
       }
       else {
         my $error = "$f was not produced. Try to debug what unoconv did.";
@@ -271,7 +276,7 @@ my sub _body ($self) {
   my $words = $self->files->size > 1 ? $many : $one;
   my $links = $self->files->map(sub {
     my ($f) = $_ =~ m|(/[\w-]+/[^/]+)$|;
-    my $url= $self->args->{dom_url} . $self->books_base_url . $f;
+    my $url = $self->args->{dom_url} . $self->books_base_url . $f;
     $self->_say("Prepared download URL: $url");
     return $url;
   });

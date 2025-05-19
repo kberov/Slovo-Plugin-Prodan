@@ -147,6 +147,7 @@ subtest 'Prepare products' => $prepare_products;
 #subtest 'Copy files'          => $copy_files;
 subtest 'Personalize files' => $personalize_files;
 subtest 'Convert files'     => $convert_files;
+
 # TODO: debug the reason for: Dubious, test returned 255 (wstat 65280, 0xff00)
 #subtest 'Send files\' urls' => $send_files_urls;
 
