@@ -171,8 +171,8 @@ sub _order_struct ($c, $o) {
 
     # TODO: implement product types as started in table products column type.
     shipmentDescription => (
-      'книг' . (@$items > 1 ? 'и' : 'а') . ' ISBN: ' . join ';',
-      map {"$_->{sku}: $_->{quantity}бр."} @$items
+      'книг' . (@$items > 1 ? 'и: ' : 'а: ') . join '; ',
+      map {"$_->{sku}: $_->{quantity}*$_->{price}"} @$items
     ),
     receiverShareAmount => $o->{shipping_price_cod} || 0,
     customerInfo        => {

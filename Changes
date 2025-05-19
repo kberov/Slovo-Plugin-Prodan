@@ -1,5 +1,13 @@
 Revision history for Slovo plugin Slovo::Plugin::Prodan
 
+0.08 2025-05-19 Added optional property "pages" handling in template
+     partials/_kniga.html.ep
+
+0.07 2023-06-10 Assigned the path of first book image to
+     stash->{celina}{og_image} in template partials/_kniga.html.ep to be used
+     as <meta property="og:image" content=""> in partials/_head.html.ep.
+     Applied PerlTidy.
+
 0.06 Implemented subcommand `products list`. Fixed failing tests.
      Implementing Slovo::Command::prodan::bookmaker - BETA.
 

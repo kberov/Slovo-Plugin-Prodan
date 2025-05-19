@@ -1,12 +1,12 @@
 package Slovo::Command::prodan::products;
 use Mojo::Base 'Slovo::Command', -signatures;
 use Mojo::Util qw(encode decode getopt dumper);
-use YAML::XS qw(Dump DumpFile LoadFile Load);
+use YAML::XS   qw(Dump DumpFile LoadFile Load);
 use Mojo::JSON qw(to_json);
 
 BEGIN {
-  binmode STDOUT => ':encoding(UTF8)';
-  binmode STDERR => ':encoding(UTF8)';
+    #  binmode STDOUT => ':encoding(UTF8)';
+    #  binmode STDERR => ':encoding(UTF8)';
 }
 
 has description => 'Manage products on the command line';
@@ -60,6 +60,9 @@ sub _create ($self, $file) {
 
   # INSERT
   for (@$products) {
+    my $product = $db->select('products', ['id'], {alias => $_->{alias}, sku => $_->{sku},})->hash;
+
+    $self->app->log->debug(product => Mojo::Util::dumper $product);
     do {
       say "Inserting $_->{alias}, $_->{sku}";
       $db->insert(
@@ -71,9 +74,8 @@ sub _create ($self, $file) {
 
           # The data is NOT encoded to UTF8 by to_json
           properties => to_json($_->{properties})});
-    } unless $db->select('products', ['id'], {alias => $_->{alias}, sku => $_->{sku},})
-      ->hash;
-  }
+    } unless $product  
+ }
   return;
 }
 

@@ -1604,14 +1604,18 @@ my $phone_url =  app->config->{consents}{phone_url};
 # template. See the next template as an example of this simple technique to
 # plug anywhere in the site.
 my $books = $c->products;
-my $variants = $books->all({
-  columns => '*',
-  where   => {alias => $celina->{alias}, p_type => $celina->{data_type}}
-})->each(sub {
+my $variants
+  = $books->all({
+  columns => '*', where => {alias => $celina->{alias}, p_type => $celina->{data_type}}
+  })->each(sub {
   $_->{properties} = Mojo::JSON::from_json($_->{properties});
-});
+  });
 return unless @$variants;
- $c->debug(' $variants' => $variants);
+
+# $c->debug(' $variants' => $variants, 'base_url:' => $c->url_for->base .'');
+# provide an image for og:image meta tag
+$celina->{og_image} = $variants->[0]{properties}{images}[0]
+  if $variants->[0]{properties}{images}[0];
 %>
 <!-- _book -->
 <!-- <%= $domain->{templates} %> -->
@@ -1631,7 +1635,7 @@ return unless @$variants;
             <a class="primary sharer button add-to-cart" href="#show_cart" title="<%= $props->{variant} %>"
                 data-sku="<%= $b->{sku} %>" data-title="<%= $b->{title} %>"
                 data-weight="<%= $props->{weight} %>" data-price="<%= $props->{price} %>"
-                    ><img src="<%= $props->{button_icon} %>"> <img src="/img/cart-plus-white.svg"></a>
+                    ><img src="<%= $props->{button_icon} %>"> <img src="/img/cart-plus-white.svg">В количката!</a>
         % }
         </figcaption>
     </figure>
@@ -1646,6 +1650,9 @@ return unless @$variants;
         <tr><th>Поредица:</th><td><%= $variants->[0]{properties}{series} %></td></tr>
         % }
         <tr><th>Размери:</th><td><%= $variants->[0]{properties}{dimensions} %></td></tr>
+        % if($variants->[0]{properties}{pages}) {
+        <tr><th>Страници:</th><td><%= $variants->[0]{properties}{pages} %></td></tr>
+        % }
         % for my $b(@$variants) {
         % my $props = $b->{properties};
         <tr class="separator">
