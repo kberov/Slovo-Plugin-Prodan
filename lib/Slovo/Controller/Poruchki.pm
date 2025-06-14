@@ -166,7 +166,9 @@ sub _order_struct ($c, $o) {
 
     # NOTE!!! TODO: Implement automatic Invoice creation from order!
     # Which field is for "invoice_num" as reported in the error from Econt???
-    declaredValue => $o->{sum},
+    #
+    # DO NOT add declaredValue to reduce cost!!! TODO: May be added only above certain ammount.
+    # declaredValue => $o->{sum},
     currency      => $o->{shipping_price_currency},
 
     # TODO: implement product types as started in table products column type.
