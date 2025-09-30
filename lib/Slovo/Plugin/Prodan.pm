@@ -1628,11 +1628,11 @@ $celina->{og_image} = $variants->[0]{properties}{images}[0]
     <figure class="col-3 text-center">
         <img title="<%= $variants->[0]{title} %>" src="<%= $variants->[0]{properties}{images}[0] %>">
         <figcaption class="text-center">
-        %= $variants->first(sub {$_->{properties}{in_store}}) ? 'За заявка' : 'Изчерпана';
+        %= $variants->first(sub {$_->{properties}{in_store}}) ? 'Купи' : 'Изчерпана';
         <br />
         % for my $b(@$variants) {
         % my $props = $b->{properties}; next unless $props->{in_store};
-            <a class="primary sharer button add-to-cart" href="#show_cart" title="<%= $props->{variant} %>"
+            <a class="primary sharer button add-to-cart" href="#show_cart" title="Купи <%= $props->{variant} %>."
                 data-sku="<%= $b->{sku} %>" data-title="<%= $b->{title} %>"
                 data-weight="<%= $props->{weight} %>" data-price="<%= $props->{price} %>"
                     ><img src="<%= $props->{button_icon} %>"> <img src="/img/cart-plus-white.svg">В количката!</a>
@@ -1659,7 +1659,9 @@ $celina->{og_image} = $variants->[0]{properties}{images}[0]
         <th>Издание:</th><td><%= $props->{variant} %></td></tr>
         <tr><th>ISBN:</th><td><%= $b->{sku} %></td></tr>
         <tr><th>Тегло:</th><td><%= sprintf('%.3f', $props->{weight}) %> кг.</td></tr>
-        <tr class="price"><th>Цена:</th><td><%= $props->{price} . ' лв. за ' . $props->{variant} %></td></tr>
+        <tr class="price"><th>Цена:</th><td><%=
+            $props->{price} . ' лв./' . sprintf('%.2f', $props->{price} / 1.95583)
+            . ' € за ' . $props->{variant} %></td></tr>
         % }
         <tr class="separator">
         % if($variants->[0]{properties}{exerpts_url}) {
