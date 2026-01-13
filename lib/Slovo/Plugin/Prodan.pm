@@ -822,11 +822,11 @@ jQuery(function ($) {
     id="show_cart"><span class="order_total"></span><img src="/img/cart.svg" width="32" height="32" /></button>
 <h3 style="display:none">Поръчка</h3>
 <table style="display:none">
-<thead><tr><th>Изделие</th><th>Ед. цена</th><th>Бр.</th><th><!-- action --></th></tr></thead>
+<thead><tr><th>Изделие</th><th>Ед. цена (€)</th><th>Бр.</th><th><!-- action --></th></tr></thead>
 <tbody><!-- Here will be the order items --></tbody>
 <tfoot>
 <tr><th>Тегло (кг.)</th><th class="order_weight"></th><th></th><th></th></tr>
-<tr><th>Общо (лв.)</th><th class="order_total"></th>
+<tr><th>Общо (€)</th><th class="order_total"></th>
 <th>
     <button class="button primary outline icon cart pull-left"
         title="Отказ от поръчката" id="cancel_order"><img 
@@ -1268,7 +1268,7 @@ title="Ако желаете да добавите някакви подробн
                   </tr>
             `);
         }
-        tfoot.append(`<tr><th colspan="3">Общо</th><td>${sum.toFixed(2)} лв.</td></tr>`);
+        tfoot.append(`<tr><th colspan="3">Общо</th><td>${sum.toFixed(2)} €</td></tr>`);
         tfoot.append(`<tr><th colspan="3">Тегло</th><td>${weight.toFixed(3)} кг.</td></tr>`);
         tfoot.append(`<tr><th colspan="3">Доставка</th><td></td></tr>`);
     }
@@ -1616,6 +1616,11 @@ return unless @$variants;
 # provide an image for og:image meta tag
 $celina->{og_image} = $variants->[0]{properties}{images}[0]
   if $variants->[0]{properties}{images}[0];
+
+# Convert the given price from LEV to EURO.
+sub to_EURO {
+    sprintf('%.2f', $_[0] / 1.95583)
+}
 %>
 <!-- _book -->
 <!-- <%= $domain->{templates} %> -->
@@ -1634,7 +1639,7 @@ $celina->{og_image} = $variants->[0]{properties}{images}[0]
         % my $props = $b->{properties}; next unless $props->{in_store};
             <a class="primary sharer button add-to-cart" href="#show_cart" title="Купи <%= $props->{variant} %>."
                 data-sku="<%= $b->{sku} %>" data-title="<%= $b->{title} %>"
-                data-weight="<%= $props->{weight} %>" data-price="<%= $props->{price} %>"
+                data-weight="<%= $props->{weight} %>" data-price="<%= to_EURO($props->{price}) %>"
                     ><img src="<%= $props->{button_icon} %>"> <img src="/img/cart-plus-white.svg">В количката!</a>
         % }
         </figcaption>
@@ -1660,7 +1665,7 @@ $celina->{og_image} = $variants->[0]{properties}{images}[0]
         <tr><th>ISBN:</th><td><%= $b->{sku} %></td></tr>
         <tr><th>Тегло:</th><td><%= sprintf('%.3f', $props->{weight}) %> кг.</td></tr>
         <tr class="price"><th>Цена:</th><td><%=
-            $props->{price} . ' лв./' . sprintf('%.2f', $props->{price} / 1.95583)
+            $props->{price} . ' лв./' . to_EURO($props->{price})
             . ' € за ' . $props->{variant} %></td></tr>
         % }
         <tr class="separator">
