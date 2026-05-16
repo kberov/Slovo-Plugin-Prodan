@@ -1557,16 +1557,6 @@ my $phone_url =  app->config->{consents}{phone_url};
     title="Споделяне в LinkedIn"><img src="/css/malka/linkedin.svg"></a><a
 
     class="button outline primary sharer" target="_blank"
-    href="https://twitter.com/intent/tweet?url=<%= $sharer_url %>&via=@kberov&title=<%= title %>"
-    aria-label="Споделяне в Twitter"
-    title="Споделяне в Twitter"><img src="/css/malka/twitter.svg"></a><a
-
-    class="button outline primary sharer" target="_blank"
-    href="mailto:?subject=<%= title %>&body=<%= $sharer_url %>"
-    aria-label="Напишете писмо на приятел"
-    title="Напишете писмо"><img src="/css/malka/email-fast-outline.svg"></a><a
-
-    class="button outline primary sharer" target="_blank"
     href="tg://msg_url?url=<%= $sharer_url %>&text=<%= title %>"
     aria-label="Споделяне в Telegram"
     title="Споделяне в Telegram"><img src="/css/malka/icons8-telegram-app.svg"></a>
@@ -1674,12 +1664,6 @@ sub to_EURO {
             $variants->[0]{properties}{exerpts_url}
         %>"><img src="/css/malka/file-pdf-box.svg"><img src="/css/malka/download.svg"></a></td></tr>
         % }
-        <tr><th>Е-поща:</th><td><a class="primary button sharer" title="Заявка по е-поща"
-        href="mailto:poruchki@studio-berov.eu?subject=Заявка: <%=$variants->[0]{title}%>">
-        <img src="/css/malka/email-fast-outline.svg">
-        <img src="/css/malka/book-open-page-variant-outline.svg">
-        Заявка по е-поща
-        </a></td></tr>
         </tbody>
     </table>
 </div><!-- end class="row" -->

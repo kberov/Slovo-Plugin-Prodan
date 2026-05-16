@@ -28,7 +28,7 @@ sub others ($m, $celina) {
       "$table.alias" => {'='   => \"$ctable.alias"},
       properties     => {-like => '%"images"%'}        #only variants which have images
     },
-    limit => 35
+    limit => 100
   })->each(sub {
     $_->{properties} = Mojo::JSON::from_json($_->{properties});
   });
